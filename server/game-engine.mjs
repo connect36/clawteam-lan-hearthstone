@@ -69,7 +69,10 @@ export class GameEngine {
       }
     }
 
-    return this.shuffle(expanded);
+    // 任务牌不参与洗牌，放在牌库末尾
+    const questCards = expanded.filter(c => (c.mechanics || []).includes('questline'));
+    const normalCards = expanded.filter(c => !(c.mechanics || []).includes('questline'));
+    return [...this.shuffle(normalCards), ...questCards];
   }
 
   // 创建随从实例
@@ -87,6 +90,8 @@ export class GameEngine {
       sourceId: source.id || source.name || `${ownerSlot}-token`,
       name: overrides.name || source.name || 'Token',
       text: overrides.text ?? source.text ?? buildKeywordText(keywords),
+      effects: structuredClone(overrides.effects ?? source.effects ?? []),
+      mechanics: structuredClone(overrides.mechanics ?? source.mechanics ?? []),
       attack,
       health,
       maxHealth: health,
@@ -120,7 +125,8 @@ export class GameEngine {
         maxMana: 1,
         deck: player1Deck,
         hand: [],
-        board: []
+        board: [],
+        runtime: { selfDamageThisTurn: 0, selfDamageThisGame: 0, damageTakenThisTurn: 0, healthChangesThisTurn: 0, questline: null, redirectSelfDamage: false, delayedDamage: [], graveyard: [], spellTax: 0, spellTaxTurns: 0 }
       },
 
       player2: {
@@ -132,7 +138,8 @@ export class GameEngine {
         maxMana: 1,
         deck: player2Deck,
         hand: [],
-        board: []
+        board: [],
+        runtime: { selfDamageThisTurn: 0, selfDamageThisGame: 0, damageTakenThisTurn: 0, healthChangesThisTurn: 0, questline: null, redirectSelfDamage: false, delayedDamage: [], graveyard: [], spellTax: 0, spellTaxTurns: 0 }
       },
 
       actionLog: [],
@@ -140,21 +147,30 @@ export class GameEngine {
       selectedAttacker: null
     };
 
-    // 先手玩家抽3张，后手玩家抽4张
+    // 任务牌必定在起始手牌 — 抽牌前先提出来
+    function pullQuestlinesToHand(player, normalDrawCount) {
+      const questCards = [];
+      player.deck = player.deck.filter(card => {
+        const isQuest = (card.mechanics || []).includes('questline');
+        if (isQuest) { questCards.push(card); return false; }
+        return true;
+      });
+      // 任务牌放最左边
+      player.hand.push(...questCards);
+      // 从牌库补抽剩余牌
+      for (let i = 0; i < normalDrawCount; i++) {
+        if (player.deck.length > 0) {
+          player.hand.push(player.deck.shift());
+        }
+      }
+    }
+
     const firstPlayer = firstPlayerIsHost ? state.player1 : state.player2;
     const firstPlayerId = firstPlayer.socketId;
     const secondPlayer = firstPlayerIsHost ? state.player2 : state.player1;
 
-    for (let i = 0; i < 3; i++) {
-      if (firstPlayer.deck.length > 0) {
-        firstPlayer.hand.push(firstPlayer.deck.shift());
-      }
-    }
-    for (let i = 0; i < 4; i++) {
-      if (secondPlayer.deck.length > 0) {
-        secondPlayer.hand.push(secondPlayer.deck.shift());
-      }
-    }
+    pullQuestlinesToHand(firstPlayer, 3);
+    pullQuestlinesToHand(secondPlayer, 4);
 
     this.log(state, '对战开始！');
     this.log(state, firstPlayerIsHost ? '玩家1 先手' : '玩家2 先手');
@@ -256,9 +272,19 @@ export class GameEngine {
       return false;
     }
 
+    // 检查 targetKinds 约束（如灵魂炸弹只能选随从）
+    if (effect.targetKinds && Array.isArray(effect.targetKinds) && effect.targetKinds.length > 0) {
+      if (!effect.targetKinds.includes(normalizedTargetRef.kind)) {
+        return false;
+      }
+    }
+
     const opponentSlot = this.getOpponentSlot(actorSlot);
     switch (effect.target) {
       case 'playerChoice':
+        if (effect.type === 'adjacentChainDamage') {
+          return normalizedTargetRef.kind === 'minion';
+        }
         if (['damage', 'heal'].includes(effect.type)) {
           return normalizedTargetRef.kind === 'hero' || normalizedTargetRef.kind === 'minion';
         }
@@ -332,7 +358,13 @@ export class GameEngine {
 
   dealDamageToHero(state, targetHero, amount, ownerSlot = null, source = null) {
     if (amount <= 0) return 0;
+    const before = targetHero.health;
     this.dealDamage(targetHero, amount);
+    const healthLost = before - targetHero.health;
+    // 追踪生命值变化（用于血肉巨人等动态费用）
+    if (healthLost > 0 && targetHero.runtime) {
+      targetHero.runtime.healthChangesThisTurn = (targetHero.runtime.healthChangesThisTurn || 0) + 1;
+    }
     if (ownerSlot && source && hasKeyword(source, 'lifesteal')) {
       this.healHeroFromLifesteal(state, ownerSlot, amount);
     }
@@ -361,8 +393,30 @@ export class GameEngine {
     return actualDamage;
   }
 
+  triggerDeathrattles(state, slot, dyingMinions) {
+    const player = state[slot];
+    for (const minion of dyingMinions) {
+      // 添加到墓地
+      player.runtime.graveyard.push({
+        name: minion.name,
+        sourceId: minion.sourceId,
+        instanceId: minion.instanceId,
+        attack: minion.attack,
+        health: minion.maxHealth || minion.health,
+        keywords: minion.keywords || [],
+      });
+      const deathrattleEffects = (minion.effects || []).filter(e => e.trigger === 'deathrattle');
+      if (deathrattleEffects.length > 0) {
+        this.log(state, `${minion.name} 的亡语触发`);
+        // 亡语效果以死亡的随从拥有者作为 actor
+        this.applyEffects(state, deathrattleEffects, slot, null, { trigger: 'deathrattle', sourceCard: minion });
+      }
+    }
+  }
+
   processBoardDeaths(state, slot) {
     const survivors = [];
+    const deadMinions = [];
     for (const minion of state[slot].board) {
       if (minion.health > 0) {
         survivors.push(minion);
@@ -380,9 +434,15 @@ export class GameEngine {
         minion.health = 1;
         survivors.push(minion);
         this.log(state, `${minion.name} 触发了复生，以 1 点生命重新站起`);
+      } else {
+        deadMinions.push(minion);
       }
     }
     state[slot].board = survivors;
+    // 触发亡语（在随从被移除前）
+    if (deadMinions.length > 0) {
+      this.triggerDeathrattles(state, slot, deadMinions);
+    }
   }
 
   processAllDeaths(state) {
@@ -402,6 +462,96 @@ export class GameEngine {
     return drawn;
   }
 
+  getEffectiveCardCost(player, card) {
+    const baseCost = Math.max(0, Number(card?.cost) || 0);
+    const modifier = card?.costModifier;
+    const runtime = player.runtime || {};
+    let cost = baseCost;
+    if (modifier) {
+      let progress = 0;
+      if (modifier.rule === 'missingHealth') progress = Math.max(0, 30 - player.health);
+      if (modifier.rule === 'selfDamageThisGame') progress = runtime.selfDamageThisGame || 0;
+      if (modifier.rule === 'healthChangedThisTurn') progress = runtime.healthChangesThisTurn || 0;
+      cost = Math.max(Number(modifier.minimum) || 0, baseCost - progress * (Number(modifier.amountPer) || 1));
+    }
+    // 对手法术税
+    if (card?.type === 'spell' && (runtime.spellTax || 0) > 0) {
+      cost += runtime.spellTax;
+    }
+    return Math.max(0, cost);
+  }
+
+  addCardToHand(player, cardId, options = {}) {
+    const source = this.getCardsLookup()[cardId];
+    if (!source || player.hand.length >= 10) return false;
+    player.hand.push({
+      ...structuredClone(source),
+      instanceId: this.generateUid(`card-${source.id}`),
+      temporary: options.temporary === true,
+    });
+    return true;
+  }
+
+  advanceQuestline(state, actorSlot, amount) {
+    const player = state[actorSlot];
+    const opponent = state[this.getOpponentSlot(actorSlot)];
+    const quest = player.runtime?.questline;
+    if (!quest || quest.completed || amount <= 0) return;
+    quest.progress += amount;
+    while (!quest.completed && quest.progress >= quest.thresholds[quest.stage]) {
+      quest.progress -= quest.thresholds[quest.stage];
+      quest.stage += 1;
+      if (quest.stage < quest.thresholds.length) {
+        // 使用每阶段独立的奖励值（如果有）
+        const stageReward = (quest.stages && quest.stages[quest.stage - 1])
+          ? quest.stages[quest.stage - 1]
+          : { rewardDamage: quest.rewardDamage, damageTarget: 'enemyHero', damageLifesteal: false };
+        const rd = Number(stageReward.rewardDamage) || 0;
+        const dmgTarget = stageReward.damageTarget || 'enemyHero';
+        const dmgLifesteal = stageReward.damageLifesteal === true;
+
+        // 伤害奖励
+        if (rd > 0) {
+          if (dmgTarget === 'enemyHero') {
+            this.dealDamage(opponent, rd);
+          } else if (dmgTarget === 'friendlyHero') {
+            this.dealDamage(player, rd);
+          }
+          // 吸血：同时治疗己方英雄
+          if (dmgLifesteal) {
+            const before = player.health;
+            player.health = Math.min(30, player.health + rd);
+            if (player.health !== before) player.runtime.healthChangesThisTurn += 1;
+          }
+        }
+        this.log(state, `${player.heroName} 完成任务线第 ${quest.stage} 阶段`);
+      } else {
+        quest.completed = true;
+        this.addCardToHand(player, quest.finalRewardCardId || 'hs-67547');
+        this.log(state, `${player.heroName} 完成任务线，获得枯萎化身塔姆辛`);
+      }
+    }
+  }
+
+  applySelfDamage(state, actorSlot, amount) {
+    const player = state[actorSlot];
+    const opponent = state[this.getOpponentSlot(actorSlot)];
+    const numericAmount = Math.max(0, Number(amount) || 0);
+    if (!numericAmount) return;
+    if (player.runtime?.redirectSelfDamage) {
+      this.dealDamage(opponent, numericAmount);
+      this.log(state, `${player.heroName} 将 ${numericAmount} 点自伤转移给对手`);
+      return;
+    }
+    this.dealDamageToHero(state, player, numericAmount);
+    player.runtime.selfDamageThisTurn += numericAmount;
+    player.runtime.selfDamageThisGame += numericAmount;
+    player.runtime.damageTakenThisTurn += numericAmount;
+    // healthChangesThisTurn 已在 dealDamageToHero() 中追踪
+    this.advanceQuestline(state, actorSlot, numericAmount);
+    this.log(state, `${player.heroName} 受到 ${numericAmount} 点自伤`);
+  }
+
   beginTurn(state, playerId, options = {}) {
     const playerState = this.getPlayerBySocketId(state, playerId);
     if (!playerState) return { player: null, drawn: 0 };
@@ -416,6 +566,19 @@ export class GameEngine {
       player.maxMana = Math.min(10, player.maxMana + 1);
     }
     player.mana = player.maxMana;
+    player.runtime ||= { selfDamageThisTurn: 0, selfDamageThisGame: 0, damageTakenThisTurn: 0, healthChangesThisTurn: 0, questline: null, redirectSelfDamage: false, delayedDamage: [], graveyard: [], spellTax: 0, spellTaxTurns: 0 };
+    player.runtime.selfDamageThisTurn = 0;
+    player.runtime.damageTakenThisTurn = 0;
+    player.runtime.healthChangesThisTurn = 0;
+    // 法术税：在对手的回合应生效，回合结束时清理
+    // 不在此处清理，在 executeEndTurn 中处理
+    for (const delayed of player.runtime.delayedDamage || []) {
+      if (delayed.turnsRemaining > 0) {
+        this.applySelfDamage(state, playerState.slot, delayed.amount);
+        delayed.turnsRemaining -= 1;
+      }
+    }
+    player.runtime.delayedDamage = (player.runtime.delayedDamage || []).filter((entry) => entry.turnsRemaining > 0);
 
     const drawn = shouldDraw ? this.drawCards(player, 1) : 0;
 
@@ -445,21 +608,29 @@ export class GameEngine {
 
     const card = player.hand.find(c => c.instanceId === payload.cardInstanceId);
     if (!card) return { valid: false, reason: 'Card not in hand' };
-    if (card.cost > player.mana) return { valid: false, reason: 'Not enough mana' };
+    if (this.getEffectiveCardCost(player, card) > player.mana) return { valid: false, reason: 'Not enough mana' };
     if (card.type === 'minion' && player.board.length >= 7) {
       return { valid: false, reason: 'Board is full' };
     }
 
     const targetRef = this.normalizeTargetRef(payload.targetRef);
 
-    if (card.type === 'spell') {
-      if (this.cardNeedsExplicitTarget(card) && !targetRef) {
-        return { valid: false, reason: 'Target required' };
-      }
+    // 检查是否需要目标（法术 + 有目标战吼的随从）
+    const needsTarget = this.cardNeedsExplicitTarget(card);
+    if (needsTarget && !targetRef) {
+      return { valid: false, reason: 'Target required' };
+    }
 
-      if (targetRef && !this.spellTargetMatchesAnyEffect(state, card.effects, slot, targetRef)) {
+    if (targetRef) {
+      const targetValid = this.spellTargetMatchesAnyEffect(state, card.effects, slot, targetRef);
+      if (!targetValid) {
         return { valid: false, reason: 'Invalid target' };
       }
+    }
+
+    // 法术和随从的战吼都需要目标验证（已在上面处理）
+    if (card.type === 'spell') {
+      // 法术额外验证已在上面的通用验证完成
     }
 
     return { valid: true, card, player, slot, targetRef };
@@ -502,7 +673,7 @@ export class GameEngine {
     const { card, player, slot, targetRef } = validation;
 
     // 消耗法力
-    player.mana -= card.cost;
+    player.mana -= this.getEffectiveCardCost(player, card);
 
     // 从手牌移除
     player.hand = player.hand.filter(c => c.instanceId !== card.instanceId);
@@ -512,10 +683,11 @@ export class GameEngine {
       const minion = this.createMinionInstance(card, slot);
       player.board.push(minion);
       this.log(state, `${player.heroName} 召唤了 ${card.name}`);
+      this.applyEffects(state, card.effects, slot, targetRef, { trigger: 'battlecry', sourceCard: card });
     } else {
       // 使用法术
       this.log(state, `${player.heroName} 施放了 ${card.name}`);
-      this.applyEffects(state, card.effects, slot, targetRef);
+      this.applyEffects(state, card.effects, slot, targetRef, { trigger: 'onPlay', sourceCard: card });
     }
 
     // 检查胜负
@@ -571,6 +743,18 @@ export class GameEngine {
 
     const { player } = playerState;
     if (!player) return { success: false, reason: 'Player not found' };
+
+    const temporaryCount = player.hand.filter((card) => card.temporary).length;
+    if (temporaryCount > 0) {
+      player.hand = player.hand.filter((card) => !card.temporary);
+      this.log(state, `${player.heroName} 的 ${temporaryCount} 张临时牌已消失`);
+    }
+
+    // 清理法术税（本方回合结束，对手施加的法术税到期）
+    player.runtime.spellTaxTurns = Math.max(0, (player.runtime.spellTaxTurns || 0) - 1);
+    if (player.runtime.spellTaxTurns === 0) {
+      player.runtime.spellTax = 0;
+    }
 
     const opponent = this.getOpponent(state, playerId);
 
@@ -628,21 +812,255 @@ export class GameEngine {
   }
 
   // 应用效果
-  applyEffects(state, effects, actorSlot, primaryTarget = null) {
+  applyEffects(state, effects, actorSlot, primaryTarget = null, context = { trigger: 'onPlay', sourceCard: null }) {
     const actorPlayer = state[actorSlot];
 
     for (const effect of effects || []) {
+      if (effect.trigger && effect.trigger !== (context.trigger || 'onPlay')) continue;
+
       if (effect.type === 'conditional') {
         // 条件效果简化处理
         const controlsMinion = actorPlayer.board.length > 0;
         const controlsNoMinion = !controlsMinion;
 
         if (effect.condition === 'controlsMinion' && controlsMinion) {
-          this.applyEffects(state, effect.effects, actorSlot, primaryTarget);
+          this.applyEffects(state, effect.effects, actorSlot, primaryTarget, context);
         }
         if (effect.condition === 'controlsNoMinion' && controlsNoMinion) {
-          this.applyEffects(state, effect.effects, actorSlot, primaryTarget);
+          this.applyEffects(state, effect.effects, actorSlot, primaryTarget, context);
         }
+        continue;
+      }
+
+      if (effect.type === 'questline') {
+        const thresholds = Array.isArray(effect.thresholds) && effect.thresholds.length ? effect.thresholds.map(Number) : [12, 12, 12];
+        // 支持每阶段独立的 stages 数组
+        const stages = Array.isArray(effect.stages) && effect.stages.length
+          ? effect.stages.map(s => ({
+              threshold: Number(s.threshold) || 12,
+              rewardDamage: Number(s.rewardDamage) || 0,
+              damageTarget: s.damageTarget || 'enemyHero',
+              damageLifesteal: s.damageLifesteal === true,
+            }))
+          : thresholds.map(t => ({
+              threshold: t,
+              rewardDamage: Number(effect.rewardDamage) || 0,
+              damageTarget: 'enemyHero',
+              damageLifesteal: (Number(effect.rewardDamage) || 0) > 0,
+            }));
+        actorPlayer.runtime.questline = {
+          thresholds,
+          stages,
+          stage: 0,
+          progress: 0,
+          finalRewardCardId: effect.finalRewardCardId || 'hs-67547',
+          completed: false,
+        };
+        this.log(state, `${actorPlayer.heroName} 开启了任务线”恶魔之种”`);
+        continue;
+      }
+
+      if (effect.type === 'selfDamage') {
+        this.applySelfDamage(state, actorSlot, effect.amount);
+        continue;
+      }
+
+      if (effect.type === 'redirectSelfDamage') {
+        actorPlayer.runtime.redirectSelfDamage = true;
+        this.log(state, `${actorPlayer.heroName} 获得枯萎化身效果`);
+        continue;
+      }
+
+      if (effect.type === 'delayedSelfDamage') {
+        actorPlayer.runtime.delayedDamage.push({ amount: Number(effect.amount) || 0, turnsRemaining: Number(effect.turns) || 0 });
+        continue;
+      }
+
+      if (effect.type === 'shuffleCopies' && context.sourceCard) {
+        const amount = Math.max(0, Number(effect.amount) || 0);
+        for (let index = 0; index < amount; index += 1) {
+          actorPlayer.deck.push({ ...structuredClone(context.sourceCard), instanceId: this.generateUid(`card-${context.sourceCard.id}`), temporary: false });
+        }
+        actorPlayer.deck = this.shuffle(actorPlayer.deck);
+        continue;
+      }
+
+      if (effect.type === 'restoreDamageThisTurn') {
+        const before = actorPlayer.health;
+        actorPlayer.health = Math.min(30, actorPlayer.health + (actorPlayer.runtime.damageTakenThisTurn || 0));
+        if (actorPlayer.health !== before) actorPlayer.runtime.healthChangesThisTurn += 1;
+        continue;
+      }
+
+      if (effect.type === 'discoverFromDeck') {
+        const index = actorPlayer.deck.findIndex((card) => !effect.excludeSelf || card.id !== context.sourceCard?.id);
+        if (index >= 0 && actorPlayer.hand.length < 10) {
+          const [card] = actorPlayer.deck.splice(index, 1);
+          actorPlayer.hand.push({ ...card, temporary: effect.temporary === true });
+        }
+        continue;
+      }
+
+      if (effect.type === 'returnDeadFriendlyMinions') {
+        const amount = Math.max(1, Number(effect.amount) || 1);
+        const graveyard = actorPlayer.runtime.graveyard || [];
+        let returned = 0;
+        for (let i = graveyard.length - 1; i >= 0 && returned < amount; i--) {
+          if (actorPlayer.hand.length >= 10) break;
+          const dead = graveyard[i];
+          actorPlayer.hand.push({
+            instanceId: this.generateUid(`returned-${dead.sourceId}`),
+            sourceId: dead.sourceId,
+            name: dead.name,
+            cost: 0,
+            type: 'minion',
+            attack: dead.attack,
+            health: dead.health,
+            keywords: dead.keywords || [],
+            text: '',
+            effects: [],
+            mechanics: [],
+          });
+          graveyard.splice(i, 1);
+          returned++;
+        }
+        if (returned > 0) {
+          this.log(state, `${actorPlayer.heroName} 将 ${returned} 个死亡的友方随从移回手牌`);
+        }
+        continue;
+      }
+
+      if (effect.type === 'destroyFriendlyAndRandomEnemies') {
+        const opponent = state[this.getOpponentSlot(actorSlot)];
+        const friendlyCount = actorPlayer.board.length;
+        for (const minion of actorPlayer.board) {
+          minion.health = 0;
+        }
+        for (let i = 0; i < friendlyCount; i++) {
+          const aliveEnemies = opponent.board.filter(m => m.health > 0);
+          if (aliveEnemies.length === 0) break;
+          const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+          target.health = 0;
+          this.log(state, `${target.name} 被火焰之灾祸消灭`);
+        }
+        this.processAllDeaths(state);
+        this.log(state, `${actorPlayer.heroName} 施放了火焰之灾祸`);
+        continue;
+      }
+
+      if (effect.type === 'grantKeyword') {
+        const keyword = effect.keyword;
+        if (!keyword) continue;
+        let targetBoard;
+        if (effect.target === 'otherFriendlyMinions') {
+          targetBoard = actorPlayer.board.filter(m => m.instanceId !== (context.sourceCard?.instanceId));
+        } else {
+          targetBoard = actorPlayer.board;
+        }
+        for (const minion of targetBoard) {
+          if (minion.health <= 0) continue;
+          const kw = minion.keywords || [];
+          if (!kw.includes(keyword)) {
+            const wasSleeping = minion.sleeping;
+            minion.keywords = [...kw, keyword];
+            // Rush: 只有原本在沉睡（本回合刚召唤）的随从才设为可攻击但不能打英雄
+            if (keyword === 'rush') {
+              minion.sleeping = false;
+              const runtime = createMinionRuntimeState(minion.keywords, {
+                sleeping: false,
+                attacksThisTurn: minion.attacksThisTurn ?? 0,
+              });
+              // 之前回合就在场的随从保留完整攻击权限
+              if (!wasSleeping) {
+                runtime.canAttack = true;
+              }
+              Object.assign(minion, runtime);
+            } else {
+              const runtime = createMinionRuntimeState(minion.keywords, {
+                sleeping: minion.sleeping,
+                attacksThisTurn: minion.attacksThisTurn,
+              });
+              Object.assign(minion, runtime);
+            }
+          }
+        }
+        this.log(state, `${actorPlayer.heroName} 的随从获得了${keyword}`);
+        continue;
+      }
+
+      if (effect.type === 'repeatAoeWhileMinionDies') {
+        const amount = Number(effect.amount) || 1;
+        let keepGoing = true;
+        let iterations = 0;
+        const maxIterations = 100;
+        while (keepGoing && iterations < maxIterations) {
+          keepGoing = false;
+          iterations++;
+          const allMinions = [...state.player1.board, ...state.player2.board];
+          for (const minion of allMinions) {
+            if (minion.health <= 0) continue;
+            const before = minion.health;
+            this.dealDamageToMinion(state, minion, amount);
+            if (minion.health <= 0 && before > 0) keepGoing = true;
+          }
+          this.processAllDeaths(state);
+        }
+        this.log(state, `${actorPlayer.heroName} 的亵渎触发了 ${iterations} 次`);
+        continue;
+      }
+
+      if (effect.type === 'swapHandWithDeckBottom') {
+        const handSize = actorPlayer.hand.length;
+        const bottomCards = actorPlayer.deck.splice(Math.max(0, actorPlayer.deck.length - handSize), handSize);
+        const oldHand = [...actorPlayer.hand];
+        actorPlayer.hand = bottomCards;
+        actorPlayer.deck.push(...oldHand);
+        this.log(state, `${actorPlayer.heroName} 将手牌与牌库底交换`);
+        continue;
+      }
+
+      if (effect.type === 'opponentSpellTax') {
+        const opponent = state[this.getOpponentSlot(actorSlot)];
+        opponent.runtime.spellTax = (opponent.runtime.spellTax || 0) + (Number(effect.amount) || 0);
+        opponent.runtime.spellTaxTurns = Number(effect.turns) || 1;
+        this.log(state, `对手下回合法术消耗增加 ${opponent.runtime.spellTax} 点`);
+        continue;
+      }
+
+      if (effect.type === 'adjacentChainDamage') {
+        const normalizedTarget = this.normalizeTargetRef(primaryTarget);
+        if (!normalizedTarget || normalizedTarget.kind !== 'minion') continue;
+        const board = state[normalizedTarget.side].board;
+        const startIndex = board.findIndex((minion) => minion.instanceId === normalizedTarget.minionId);
+        if (startIndex < 0) continue;
+        let amount = Math.max(1, Number(effect.amount) || 1);
+        for (let index = startIndex; index < board.length; index += 1) {
+          this.dealDamageToMinion(state, board[index], amount);
+          amount += Number(effect.step) || 1;
+        }
+        this.processAllDeaths(state);
+        this.log(state, `${actorPlayer.heroName} 触发了多米诺效应`);
+        continue;
+      }
+
+      if (effect.type === 'destroy') {
+        const targetRef = this.resolveEffectTargetRef(effect, actorSlot, primaryTarget);
+        const targetEntity = this.getTargetEntity(state, targetRef);
+        if (!targetRef || targetRef.kind !== 'minion' || !targetEntity) continue;
+        targetEntity.health = 0;
+        this.processAllDeaths(state);
+        this.log(state, `${actorPlayer.heroName} 消灭了一个随从`);
+        continue;
+      }
+
+      if (effect.type === 'restoreMana') {
+        if (effect.condition === 'heroDamagedThisTurn' && (actorPlayer.runtime?.damageTakenThisTurn || 0) <= 0) continue;
+        actorPlayer.mana = Math.min(actorPlayer.maxMana, actorPlayer.mana + (Number(effect.amount) || 0));
+        continue;
+      }
+
+      if (effect.type === 'setNextHeroPowerCost') {
+        actorPlayer.runtime.nextHeroPowerCost = Math.max(0, Number(effect.amount) || 0);
         continue;
       }
 
@@ -673,6 +1091,7 @@ export class GameEngine {
         const before = targetEntity.health;
         targetEntity.health = Math.min(maxHealth, targetEntity.health + (Number(effect.amount) || 0));
         const amount = targetEntity.health - before;
+        if (targetRef.side === actorSlot && amount > 0) actorPlayer.runtime.healthChangesThisTurn += 1;
         this.log(state, `${this.describeTarget(state, targetRef)} 恢复了 ${amount} 点生命值`);
         continue;
       }
@@ -696,7 +1115,8 @@ export class GameEngine {
         let drawn = 0;
         for (let i = 0; i < amount; i++) {
           if (targetPlayer.deck.length > 0 && targetPlayer.hand.length < 10) {
-            targetPlayer.hand.push(targetPlayer.deck.shift());
+            const drawnCard = targetPlayer.deck.shift();
+            targetPlayer.hand.push({ ...drawnCard, temporary: effect.temporary === true });
             drawn++;
           }
         }

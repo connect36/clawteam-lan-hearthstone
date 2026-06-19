@@ -16,7 +16,7 @@ This project now keeps handoff content in several focused Markdown files:
 
 Project root:
 
-- `/Users/ruiliu/Documents/New project/clawteam-lan-hearthstone`
+- `/Users/ruiliu/Documents/炉石传说卡组体验`
 
 Suggested reading order for another AI:
 

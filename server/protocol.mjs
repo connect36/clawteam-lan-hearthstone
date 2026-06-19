@@ -23,7 +23,8 @@ export const ClientMessageTypes = Object.freeze({
   JOIN_ROOM: 'join_room',
   LEAVE_ROOM: 'leave_room',
   SET_READY: 'set_ready',
-  ACTION: 'action'
+  ACTION: 'action',
+  UPDATE_CARD_OVERRIDES: 'update_card_overrides'
 });
 
 // 操作类型

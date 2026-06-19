@@ -1,5 +1,6 @@
 export const KEYWORD_DEFINITIONS = Object.freeze([
   { id: 'taunt', label: '嘲讽' },
+  { id: 'rush', label: '突袭' },
   { id: 'poisonous', label: '剧毒' },
   { id: 'divineShield', label: '圣盾' },
   { id: 'lifesteal', label: '吸血' },

@@ -2,7 +2,7 @@
 
 ## Project Root
 
-- `/Users/ruiliu/Documents/New project/clawteam-lan-hearthstone`
+- `/Users/ruiliu/Documents/炉石传说卡组体验`
 
 ## Document Scope
 
@@ -208,6 +208,27 @@ Publication details:
 - documentation language: `English`
 - local standalone git repository pushed to `main`
 
+### 13. Combat-Space Compression and Port Recovery
+
+A later usability pass focused on making normal turns feel less scroll-heavy during actual play.
+
+Problems found in this phase:
+
+- the desktop layout spent too much width on non-critical side panels
+- the board could become tall enough that playing from hand and then choosing a target required extra upward scrolling
+- enemy hero and enemy minions did not share the same attack-target highlight treatment
+- attack-target and spell-target hero states were partially mixed together
+- the default local port unexpectedly drifted back to `3000`, breaking the expected `3301` workflow
+
+Fix direction:
+
+- flatten the main page into a gameplay-first single-column flow
+- move `LAN / log / tips` panels below the main playfield on desktop
+- compress hero panels, board lanes, and hand-card sizing
+- keep battlefield lanes visually single-row on desktop
+- split `attack target` and `spell target` states while preserving highlight parity between heroes and minions
+- restore the default server port to `3301`
+
 ## Major Problems Fixed During Iteration
 
 ### Editor Issues
@@ -235,6 +256,14 @@ Publication details:
 - `Divine Shield + Reborn` losing Divine Shield after reborn
 - inconsistent keyword display order
 - `Reborn` eventually being standardized to display last
+
+### Layout and Service Issues
+
+- default server port unexpectedly falling back to `3000`
+- desktop board space being too tall for efficient play
+- utility panels competing with gameplay space in a right-side column
+- enemy hero and enemy minions using inconsistent attack-target highlights
+- attack-target and spell-target hero highlights being mixed together
 
 ## Validation Performed
 
@@ -285,6 +314,13 @@ The following routes were repeatedly confirmed to respond correctly:
 Common test port:
 
 - `3301`
+
+Additional recent verification included:
+
+- confirming `http://127.0.0.1:3301/` responds with `200 OK`
+- confirming `http://127.0.0.1:3301/agents` responds with `200 OK`
+- confirming `server.mjs` syntax after restoring the default port
+- confirming `public/app.js` syntax after targeting-highlight changes
 
 ## Ongoing Maintenance Rule
 

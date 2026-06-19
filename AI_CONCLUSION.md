@@ -2,7 +2,7 @@
 
 ## Project Root
 
-- `/Users/ruiliu/Documents/New project/clawteam-lan-hearthstone`
+- `/Users/ruiliu/Documents/炉石传说卡组体验`
 
 ## Public Repository
 
@@ -24,18 +24,38 @@ Main goals:
 - reachable by devices on the same LAN
 - no frontend framework dependency
 
+## Current Play Layout
+
+The main page is now tuned more aggressively for direct play instead of side documentation.
+
+Desktop layout priorities:
+
+- hero panels, battlefield, hand, and action buttons are kept in a tighter vertical stack
+- `LAN address`, `combat log`, and `tips` sit below the playfield instead of taking board width in a right sidebar
+- battlefield lanes are compressed to favor a single visible row of minions
+- hand cards and board cards are tightened to reduce post-play scrolling
+
+Mobile layout priorities:
+
+- hand and board still allow horizontal overflow where needed
+- controls remain usable on narrow touch screens
+
 ## How To Run
 
 ```bash
-cd "/Users/ruiliu/Documents/New project/clawteam-lan-hearthstone"
+cd "/Users/ruiliu/Documents/炉石传说卡组体验"
 npm install
 npm start
 ```
 
+Default behavior:
+
+- `npm start` serves the project on `3301`
+
 Custom port example:
 
 ```bash
-PORT=3301 npm start
+PORT=3400 npm start
 ```
 
 The server listens on:
@@ -154,6 +174,8 @@ Rules include:
 - `same target`
   Follow-up conditional effects reuse the target chosen for the primary effect.
 - all valid targets are highlighted in the UI
+- attack targets and spell targets stay visually distinct
+- hero and minion attack targets now use the same highlight language
 
 ## Opening and Draw Rules
 
@@ -240,6 +262,12 @@ To make restore behavior more stable, the app uses mode-specific query parameter
 
 - [server.mjs](./server.mjs)
   HTTP server, static routing, WebSocket integration, and API endpoints.
+
+## Recent Stability Notes
+
+- the default server port has been restored to `3301`
+- `http://127.0.0.1:3301/` and `http://127.0.0.1:3301/agents` are both part of the normal local workflow
+- desktop combat layout was recently compacted specifically to reduce scrolling between hand play and target selection
 
 ## Known Limits
 

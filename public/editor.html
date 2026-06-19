@@ -23,6 +23,7 @@
         </div>
         <div class="hero-actions">
           <a class="top-link" href="/">返回游戏</a>
+          <a class="top-link" href="/editor/library">卡牌库与卡组</a>
           <a class="top-link" href="/agents">查看日志</a>
         </div>
       </header>
@@ -37,9 +38,11 @@
             <div class="toolbar-actions">
               <button id="new-spell-button" type="button" class="secondary-button">新建法术模板</button>
               <button id="new-minion-button" type="button" class="secondary-button">新建随从模板</button>
+              <button id="load-questline-deck-button" type="button" class="secondary-button">载入当前黑眼任务术</button>
               <button id="reset-all-button" type="button" class="secondary-button">重置全部修改</button>
             </div>
           </div>
+          <p class="deck-code-note">当前预设：黑眼任务术 · 17 种 · 30 张 · 狂野模式</p>
           <div id="card-list" class="card-list"></div>
         </aside>
 
@@ -54,6 +57,7 @@
             </div>
 
             <form id="card-form" class="editor-form">
+              <!-- === 基础信息 === -->
               <label>
                 <span>卡牌 ID</span>
                 <input id="field-id" name="id" type="text" readonly />
@@ -91,124 +95,101 @@
                   <option value="false">手动编辑</option>
                 </select>
               </label>
-              <label>
-                <span>攻击</span>
-                <input id="field-attack" name="attack" type="number" min="0" max="30" />
-              </label>
-              <label>
-                <span>生命</span>
-                <input id="field-health" name="health" type="number" min="1" max="60" />
-              </label>
-              <label class="form-span">
-                <span>随从关键词</span>
-                <div class="keyword-checkboxes">
-                  <label class="keyword-option"><input type="checkbox" name="keywords" value="taunt" /> 嘲讽</label>
-                  <label class="keyword-option"><input type="checkbox" name="keywords" value="poisonous" /> 剧毒</label>
-                  <label class="keyword-option"><input type="checkbox" name="keywords" value="divineShield" /> 圣盾</label>
-                  <label class="keyword-option"><input type="checkbox" name="keywords" value="lifesteal" /> 吸血</label>
-                  <label class="keyword-option"><input type="checkbox" name="keywords" value="windfury" /> 风怒</label>
-                  <label class="keyword-option"><input type="checkbox" name="keywords" value="reborn" /> 复生</label>
+
+              <!-- === 随从专属字段（法术禁用） === -->
+              <fieldset id="minion-fields" class="form-fieldset">
+                <legend>随从属性</legend>
+                <label>
+                  <span>攻击</span>
+                  <input id="field-attack" name="attack" type="number" min="0" max="30" />
+                </label>
+                <label>
+                  <span>生命</span>
+                  <input id="field-health" name="health" type="number" min="1" max="60" />
+                </label>
+                <label class="form-span">
+                  <span>随从关键词</span>
+                  <div class="keyword-checkboxes" id="keywords-container">
+                    <label class="keyword-option"><input type="checkbox" name="keywords" value="taunt" /> 嘲讽</label>
+                    <label class="keyword-option"><input type="checkbox" name="keywords" value="rush" /> 突袭</label>
+                    <label class="keyword-option"><input type="checkbox" name="keywords" value="poisonous" /> 剧毒</label>
+                    <label class="keyword-option"><input type="checkbox" name="keywords" value="divineShield" /> 圣盾</label>
+                    <label class="keyword-option"><input type="checkbox" name="keywords" value="lifesteal" /> 吸血</label>
+                    <label class="keyword-option"><input type="checkbox" name="keywords" value="windfury" /> 风怒</label>
+                    <label class="keyword-option"><input type="checkbox" name="keywords" value="reborn" /> 复生</label>
+                  </div>
+                </label>
+              </fieldset>
+
+              <!-- === 卡牌级特殊机制 === -->
+              <fieldset class="form-fieldset">
+                <legend>卡牌机制（从效果自动派生，无需手动勾选）</legend>
+                <div id="derived-mechanics" class="derived-mechanics">
+                  <span class="mechanic-badge" data-mechanic="battlecry" style="display:none">战吼</span>
+                  <span class="mechanic-badge" data-mechanic="deathrattle" style="display:none">亡语</span>
+                  <span class="mechanic-badge" data-mechanic="questline" style="display:none">任务线</span>
+                  <span class="mechanic-badge" data-mechanic="tradeable" style="display:none">可交易</span>
+                  <span class="mechanic-badge" data-mechanic="temporary" style="display:none">临时牌</span>
+                  <span class="mechanic-badge" data-mechanic="discover" style="display:none">发现</span>
+                  <span class="mechanic-badge" data-mechanic="lifesteal" style="display:none">吸血</span>
+                  <span class="mechanic-badge" data-mechanic="questReward" style="display:none">任务奖励</span>
                 </div>
-              </label>
-              <label>
-                <span>伤害量</span>
-                <input id="field-damage" name="damage" type="number" min="0" max="99" />
-              </label>
-              <label>
-                <span>法术目标</span>
-                <select id="field-damage-target" name="damageTarget">
-                  <option value="enemyHero">敌方英雄</option>
-                  <option value="enemyMinion">敌方随从</option>
-                  <option value="friendlyHero">己方英雄</option>
-                  <option value="friendlyMinion">己方随从</option>
-                  <option value="playerChoice">由玩家决定</option>
-                </select>
-              </label>
-              <label>
-                <span>治疗量</span>
-                <input id="field-heal" name="heal" type="number" min="0" max="99" />
-              </label>
-              <label>
-                <span>护甲量</span>
-                <input id="field-armor" name="armor" type="number" min="0" max="99" />
-              </label>
-              <label>
-                <span>抽牌量</span>
-                <input id="field-draw" name="draw" type="number" min="0" max="20" />
-              </label>
-              <label>
-                <span>召唤数量</span>
-                <input id="field-summon-count" name="summonCount" type="number" min="0" max="7" />
-              </label>
-              <label>
-                <span>召唤名称</span>
-                <input id="field-summon-name" name="summonName" type="text" />
-              </label>
-              <label>
-                <span>召唤攻击</span>
-                <input id="field-summon-attack" name="summonAttack" type="number" min="0" max="30" />
-              </label>
-              <label>
-                <span>召唤生命</span>
-                <input id="field-summon-health" name="summonHealth" type="number" min="1" max="60" />
-              </label>
-              <label class="form-span">
-                <span>召唤随从关键词</span>
-                <div class="keyword-checkboxes">
-                  <label class="keyword-option"><input type="checkbox" name="summonKeywords" value="taunt" /> 嘲讽</label>
-                  <label class="keyword-option"><input type="checkbox" name="summonKeywords" value="poisonous" /> 剧毒</label>
-                  <label class="keyword-option"><input type="checkbox" name="summonKeywords" value="divineShield" /> 圣盾</label>
-                  <label class="keyword-option"><input type="checkbox" name="summonKeywords" value="lifesteal" /> 吸血</label>
-                  <label class="keyword-option"><input type="checkbox" name="summonKeywords" value="windfury" /> 风怒</label>
-                  <label class="keyword-option"><input type="checkbox" name="summonKeywords" value="reborn" /> 复生</label>
+              </fieldset>
+
+              <!-- === 任务线（每阶段独立配置） === -->
+              <fieldset id="questline-fields" class="form-fieldset">
+                <legend>任务线（仅任务线卡牌需要）</legend>
+                <label class="form-span">
+                  <span>启用任务线</span>
+                  <select id="field-questline-enabled" name="questlineEnabled">
+                    <option value="false">否</option>
+                    <option value="true">是</option>
+                  </select>
+                </label>
+                <div id="quest-stages-container" class="form-span">
+                  <!-- JS 动态渲染阶段 -->
                 </div>
+                <div class="effect-groups-actions">
+                  <button id="add-quest-stage-button" type="button" class="secondary-button">＋ 添加阶段</button>
+                </div>
+              </fieldset>
+
+              <!-- === 动态费用规则 === -->
+              <fieldset class="form-fieldset">
+                <legend>动态费用</legend>
+                <label>
+                  <span>动态费用规则</span>
+                  <select id="field-cost-rule" name="costRule">
+                    <option value="">固定费用</option>
+                    <option value="missingHealth">每缺失1点生命，费用-1</option>
+                    <option value="selfDamageThisGame">本局每自伤1点，费用-1</option>
+                    <option value="healthChangedThisTurn">本回合每次生命变化，费用-1</option>
+                  </select>
+                </label>
+                <label>
+                  <span>最低费用</span>
+                  <input id="field-cost-minimum" name="costMinimum" type="number" min="0" max="20" />
+                </label>
+              </fieldset>
+
+              <!-- === 效果组列表（核心：每个效果组自带触发器） === -->
+              <div id="effect-groups-container">
+                <!-- JS 动态渲染 -->
+              </div>
+              <div class="effect-groups-actions">
+                <button id="add-effect-group-button" type="button" class="secondary-button">＋ 添加效果组</button>
+              </div>
+
+              <!-- === 高级 JSON === -->
+              <label class="form-span">
+                <span>额外效果 JSON（放无法用上面字段表达的高级效果）</span>
+                <textarea id="field-effects" name="effects" rows="8"></textarea>
               </label>
-              <label>
-                <span>群体增攻</span>
-                <input id="field-buff-attack" name="buffAttack" type="number" min="0" max="20" />
-              </label>
-              <label>
-                <span>群体增血</span>
-                <input id="field-buff-health" name="buffHealth" type="number" min="0" max="20" />
-              </label>
-              <label>
-                <span>条件触发</span>
-                <select id="field-condition" name="condition">
-                  <option value="">无</option>
-                  <option value="controlsMinion">如果你的场上有随从</option>
-                  <option value="controlsNoMinion">如果你的场上没有随从</option>
-                </select>
-              </label>
-              <label>
-                <span>条件奖励类型</span>
-                <select id="field-condition-type" name="conditionType">
-                  <option value="">无</option>
-                  <option value="damage">额外伤害</option>
-                  <option value="heal">额外治疗</option>
-                  <option value="armor">额外护甲</option>
-                  <option value="draw">额外抽牌</option>
-                </select>
-              </label>
-              <label>
-                <span>条件目标</span>
-                <select id="field-condition-target" name="conditionTarget">
-                  <option value="enemyHero">敌方英雄</option>
-                  <option value="friendlyHero">己方英雄</option>
-                  <option value="samePrimary">相同目标</option>
-                  <option value="playerChoice">由玩家决定</option>
-                </select>
-              </label>
-              <label>
-                <span>条件奖励值</span>
-                <input id="field-condition-amount" name="conditionAmount" type="number" min="0" max="99" />
-              </label>
+
+              <!-- === 显示文本 === -->
               <label class="form-span">
                 <span>显示文本（自动同步开启时会跟着上面的字段变化）</span>
                 <textarea id="field-text" name="text" rows="3"></textarea>
-              </label>
-              <label class="form-span">
-                <span>额外效果 JSON（放无法用上面字段表达的高级效果）</span>
-                <textarea id="field-effects" name="effects" rows="10"></textarea>
               </label>
             </form>
 

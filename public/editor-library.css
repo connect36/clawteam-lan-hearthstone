@@ -1,0 +1,266 @@
+.library-shell {
+  width: min(1480px, calc(100% - 24px));
+}
+
+.library-layout {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.library-section {
+  padding: 20px;
+}
+
+.library-head h2 {
+  margin-top: 6px;
+  font-size: 1.6rem;
+}
+
+.library-stats,
+.deck-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.library-stats span,
+.deck-summary span {
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.library-stats strong,
+.deck-summary strong {
+  color: var(--text);
+}
+
+.library-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(140px, 220px));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.library-filters label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.library-filters input,
+.library-filters select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--text);
+  background: #111722;
+}
+
+.library-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
+  gap: 10px;
+}
+
+.library-card-item {
+  display: flex;
+  min-height: 235px;
+  flex-direction: column;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(150deg, rgba(127, 208, 255, 0.06), rgba(255, 255, 255, 0.025));
+}
+
+.library-card-topline {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.library-card-cost,
+.deck-row-cost {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #07111d;
+  font-weight: 800;
+  background: var(--accent);
+}
+
+.library-card-item h3 {
+  margin: 13px 0 8px;
+  font-size: 1.18rem;
+}
+
+.library-card-item p {
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.9rem;
+}
+
+.mechanic-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.mechanic-row span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: var(--gold);
+  background: rgba(239, 210, 143, 0.1);
+  font-size: 0.72rem;
+}
+
+.card-edit-link {
+  margin-top: auto;
+  padding-top: 14px;
+  color: var(--accent);
+  font-size: 0.86rem;
+}
+
+.deck-code-block,
+.deck-archive-item code {
+  display: block;
+  margin-top: 12px;
+  padding: 12px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--gold);
+  background: #0c1119;
+}
+
+.mana-curve {
+  display: grid;
+  grid-template-columns: repeat(11, minmax(24px, 1fr));
+  align-items: end;
+  gap: 6px;
+  min-height: 145px;
+  margin: 18px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.13);
+}
+
+.curve-column {
+  display: grid;
+  justify-items: center;
+  align-items: end;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.curve-column i {
+  width: min(28px, 100%);
+  border-radius: 7px 7px 3px 3px;
+  background: linear-gradient(180deg, var(--accent), #407da8);
+}
+
+.curve-count {
+  color: var(--text);
+}
+
+.deck-list,
+.compact-deck-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.deck-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.deck-row-count {
+  color: var(--gold);
+  font-weight: 800;
+}
+
+.library-status {
+  margin-top: 14px;
+}
+
+.library-status.is-success {
+  color: #07140a;
+  background: var(--green);
+}
+
+.deck-archive {
+  display: grid;
+  gap: 10px;
+}
+
+.deck-archive-item {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.deck-archive-item summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.deck-archive-item summary span:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.deck-archive-item small {
+  color: var(--muted);
+}
+
+.deck-archive-item code,
+.compact-deck-list {
+  margin: 0 14px 14px;
+}
+
+.empty-state {
+  padding: 26px;
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .library-filters,
+  .deck-list,
+  .compact-deck-list {
+    grid-template-columns: 1fr;
+  }
+
+  .library-head {
+    display: grid;
+  }
+
+  .mana-curve {
+    gap: 3px;
+    padding: 10px 6px;
+  }
+}

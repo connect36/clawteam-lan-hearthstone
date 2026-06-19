@@ -591,9 +591,9 @@ button {
 .app-shell {
   position: relative;
   z-index: 1;
-  width: min(1380px, calc(100% - 24px));
+  width: min(1500px, calc(100% - 24px));
   margin: 0 auto;
-  padding: 18px 0 28px;
+  padding: 14px 0 24px;
 }
 
 .panel {
@@ -623,12 +623,12 @@ button {
   grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.9fr);
   gap: 18px;
   align-items: stretch;
-  padding: 28px;
+  padding: 22px 24px;
 }
 
 .masthead-copy {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   align-content: start;
 }
 
@@ -647,17 +647,17 @@ button {
 
 #hero-title {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(2.3rem, 4vw, 4.6rem);
+  font-size: clamp(2rem, 3.4vw, 3.9rem);
   line-height: 0.94;
   letter-spacing: 0.01em;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35), 0 0 28px rgba(221, 186, 108, 0.22);
 }
 
 .lede {
-  max-width: 64ch;
+  max-width: 70ch;
   color: var(--muted);
-  line-height: 1.7;
-  font-size: 1.02rem;
+  line-height: 1.55;
+  font-size: 0.94rem;
 }
 
 .status-bar {
@@ -669,8 +669,8 @@ button {
 
 .status-item {
   display: grid;
-  gap: 8px;
-  padding: 16px 18px;
+  gap: 6px;
+  padding: 13px 15px;
   border-radius: var(--radius-md);
   background: var(--panel-soft);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -692,16 +692,21 @@ button {
 
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.78fr);
-  gap: 18px;
-  margin-top: 18px;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin-top: 14px;
   align-items: start;
 }
 
 .playfield,
 .utility-stack {
   display: grid;
-  gap: 18px;
+  gap: 12px;
+}
+
+.utility-stack {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
 }
 
 .hero-panel,
@@ -711,7 +716,7 @@ button {
 .lan-card,
 .log-zone,
 .hint-zone {
-  padding: 22px;
+  padding: 16px 18px;
 }
 
 .hero-panel {
@@ -737,14 +742,14 @@ button {
   z-index: 1;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
 }
 
 .hero-avatar {
-  width: clamp(78px, 12vw, 108px);
+  width: clamp(60px, 7vw, 82px);
   aspect-ratio: 1;
-  border-radius: 26px;
+  border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
@@ -768,13 +773,13 @@ button {
 .hero-copy {
   min-width: 0;
   display: grid;
-  gap: 7px;
+  gap: 4px;
 }
 
 .hero-name,
 .section-title {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(1.3rem, 2vw, 1.9rem);
+  font-size: clamp(1.15rem, 1.6vw, 1.55rem);
   line-height: 1.05;
 }
 
@@ -783,25 +788,27 @@ button {
 }
 
 .hero-note {
-  line-height: 1.6;
+  font-size: 0.88rem;
+  line-height: 1.35;
 }
 
 .hero-resources {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 8px;
 }
 
 .resource-pill {
-  min-width: 74px;
-  padding: 10px 12px;
+  min-width: 62px;
+  padding: 8px 10px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.05);
   text-align: center;
   font-weight: 700;
   letter-spacing: 0.02em;
+  font-size: 0.92rem;
 }
 
 .resource-pill--health {
@@ -835,7 +842,7 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .section-title {
@@ -843,17 +850,17 @@ button {
 }
 
 .zone-hint {
-  max-width: 20ch;
+  max-width: 24ch;
   text-align: right;
-  line-height: 1.5;
-  font-size: 0.9rem;
+  line-height: 1.35;
+  font-size: 0.82rem;
 }
 
 .battlefield-surface {
   position: relative;
   display: grid;
-  gap: 14px;
-  padding: 18px;
+  gap: 8px;
+  padding: 12px;
   border-radius: calc(var(--radius-xl) - 8px);
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.03), transparent 18%, rgba(255, 255, 255, 0.03)),
@@ -872,7 +879,7 @@ button {
 .battlefield-surface::before {
   content: "";
   position: absolute;
-  inset: 11px;
+  inset: 8px;
   border-radius: calc(var(--radius-xl) - 18px);
   border: 1px solid rgba(245, 223, 173, 0.14);
   pointer-events: none;
@@ -880,15 +887,17 @@ button {
 
 .battle-lane {
   position: relative;
-  min-height: 112px;
-  display: flex;
-  flex-wrap: wrap;
-  align-content: center;
-  gap: 10px;
-  padding: 14px 16px;
-  border-radius: 22px;
+  min-height: 124px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  justify-content: stretch;
+  align-content: start;
+  gap: 8px;
+  padding: 34px 10px 10px;
+  border-radius: 18px;
   border: 1px dashed rgba(245, 223, 173, 0.18);
   background: rgba(4, 3, 2, 0.15);
+  overflow: hidden;
 }
 
 .battle-lane::before {
@@ -910,27 +919,28 @@ button {
 
 .lane-label {
   position: absolute;
-  top: 12px;
-  right: 16px;
+  top: 8px;
+  right: 10px;
   z-index: 1;
-  padding: 6px 10px;
+  padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.24);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  font-size: 0.78rem;
+  background: rgba(6, 5, 4, 0.44);
+  border: 1px solid rgba(245, 223, 173, 0.16);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.16);
+  font-size: 0.72rem;
   letter-spacing: 0.04em;
 }
 
 .battle-center {
   position: relative;
-  height: 26px;
+  height: 10px;
 }
 
 .battle-ring {
   position: absolute;
   left: 50%;
-  width: min(74%, 520px);
-  height: 12px;
+  width: min(78%, 680px);
+  height: 4px;
   transform: translateX(-50%);
   border-radius: 999px;
   background: linear-gradient(90deg, transparent, rgba(245, 223, 173, 0.42), transparent);
@@ -956,7 +966,7 @@ button {
   gap: 12px;
   align-items: stretch;
   overflow-x: auto;
-  padding: 4px 2px 8px;
+  padding: 2px 2px 6px;
   scroll-snap-type: x proximity;
   overscroll-behavior-x: contain;
 }
@@ -995,8 +1005,8 @@ button {
 }
 
 .hand-track > * {
-  flex: 0 0 clamp(116px, 18vw, 156px);
-  min-height: 176px;
+  flex: 0 0 clamp(108px, 12vw, 138px);
+  min-height: 156px;
   border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background:
@@ -1008,7 +1018,7 @@ button {
 
 .button-zone {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   background:
     radial-gradient(circle at top left, rgba(239, 155, 79, 0.09), transparent 34%),
@@ -1099,7 +1109,7 @@ button {
 .log-list {
   display: grid;
   gap: 10px;
-  max-height: 420px;
+  max-height: 220px;
   margin: 0;
   padding: 4px 0 0 20px;
   overflow: auto;
@@ -1325,22 +1335,32 @@ button {
 }
 
 .board-minion {
+  position: relative;
+  isolation: isolate;
   display: grid;
-  gap: 8px;
+  gap: 6px;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   align-content: start;
-  min-width: min(168px, 100%);
-  padding: 14px;
-  border-radius: 18px;
+  width: 100%;
+  min-width: 0;
+  min-height: 108px;
+  padding: 10px 9px 8px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background:
     radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 28%),
     linear-gradient(180deg, rgba(39, 28, 18, 0.96), rgba(19, 13, 8, 0.98));
   color: var(--text);
   text-align: left;
+  overflow: hidden;
   transition:
     transform 140ms ease,
     border-color 140ms ease,
-    box-shadow 140ms ease;
+    box-shadow 140ms ease,
+    background 140ms ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 12px 26px rgba(0, 0, 0, 0.18);
 }
 
 .board-minion--enemy {
@@ -1372,6 +1392,7 @@ button {
 
 /* 可攻击/法术目标 - 强烈的高亮效果 */
 .board-minion.is-selected,
+.board-minion.is-targetable,
 .hero-panel.is-targetable {
   border-color: #ffd700;
   outline: none;
@@ -1435,6 +1456,13 @@ button {
 }
 
 /* 敌方随从被指定攻击时的特殊效果 */
+.board-minion--enemy.is-targetable {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 215, 0, 0.2), transparent 70%),
+    radial-gradient(circle at top, rgba(255, 215, 0, 0.15), transparent 28%),
+    linear-gradient(180deg, rgba(33, 24, 42, 0.96), rgba(17, 12, 24, 0.98));
+}
+
 .board-minion--enemy.is-spell-targetable {
   background:
     radial-gradient(circle at 50% 50%, rgba(0, 212, 255, 0.2), transparent 70%),
@@ -1449,12 +1477,15 @@ button {
     linear-gradient(180deg, rgba(33, 24, 42, 0.96), rgba(17, 12, 24, 0.98));
 }
 
+.board-minion.is-targetable,
+.board-minion.is-spell-targetable,
 .hero-panel.is-targetable,
 .hero-panel.is-spell-targetable {
   cursor: pointer;
   transform: scale(1.01);
 }
 
+.board-minion.is-targetable::after,
 .hero-panel.is-targetable::after {
   content: "";
   position: absolute;
@@ -1465,6 +1496,7 @@ button {
   pointer-events: none;
 }
 
+.board-minion.is-spell-targetable::after,
 .hero-panel.is-spell-targetable::after {
   content: "";
   position: absolute;
@@ -1501,39 +1533,45 @@ button {
 
 .board-minion:disabled {
   cursor: default;
+  transform: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 18px rgba(0, 0, 0, 0.14);
 }
 
 .board-minion__name {
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 1rem;
+  font-size: 0.95rem;
+  line-height: 1.15;
 }
 
 .board-minion__keywords {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 .board-minion__text {
-  min-height: 1.5em;
+  min-height: 0;
   color: var(--muted-soft);
-  font-size: 0.84rem;
-  line-height: 1.45;
+  font-size: 0.74rem;
+  line-height: 1.28;
 }
 
 .board-minion__stats {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   margin-top: auto;
 }
 
 .board-minion__stats strong {
-  min-width: 42px;
-  padding: 6px 10px;
+  min-width: 32px;
+  padding: 5px 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   text-align: center;
+  font-size: 0.9rem;
 }
 
 .action-button:disabled,
@@ -1575,6 +1613,10 @@ button {
 @media (max-width: 1120px) {
   .masthead,
   .content-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .utility-stack {
     grid-template-columns: 1fr;
   }
 }
@@ -1620,8 +1662,19 @@ button {
   }
 
   .battle-lane {
-    min-height: 94px;
-    padding-top: 44px;
+    min-height: 120px;
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    align-items: stretch;
+    grid-template-columns: none;
+    gap: 10px;
+    padding: 40px 12px 12px;
+  }
+
+  .board-minion {
+    flex: 0 0 min(31vw, 148px);
+    width: auto;
   }
 
   .button-zone {
@@ -1646,6 +1699,13 @@ button {
   .hand-track > * {
     flex-basis: 76vw;
     min-height: 164px;
+  }
+
+  .board-minion {
+    flex: 0 0 min(42vw, 152px);
+    width: auto;
+    min-height: 112px;
+    padding-inline: 12px;
   }
 
   .button-zone {

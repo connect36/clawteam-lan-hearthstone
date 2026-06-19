@@ -2,7 +2,7 @@
 
 ## Project Root
 
-- `/Users/ruiliu/Documents/New project/clawteam-lan-hearthstone`
+- `/Users/ruiliu/Documents/炉石传说卡组体验`
 
 ## Current Publication State
 

@@ -2,7 +2,7 @@
 
 ## Project Root
 
-- `/Users/ruiliu/Documents/New project/clawteam-lan-hearthstone`
+- `/Users/ruiliu/Documents/炉石传说卡组体验`
 
 ## Tech Stack
 
@@ -13,15 +13,19 @@
 ## Start the Project
 
 ```bash
-cd "/Users/ruiliu/Documents/New project/clawteam-lan-hearthstone"
+cd "/Users/ruiliu/Documents/炉石传说卡组体验"
 npm install
 npm start
 ```
 
-Common test port:
+Default port:
+
+- `3301`
+
+Custom port example:
 
 ```bash
-PORT=3301 npm start
+PORT=3400 npm start
 ```
 
 ## Routes and Pages
@@ -176,6 +180,11 @@ Responsible for:
 - static routing
 - `/editor`, `/agents`, and API routing
 - WebSocket entry and message routing
+- default local/LAN port fallback
+
+Current default fallback port:
+
+- `3301`
 
 ## Adding New Features
 
@@ -264,6 +273,15 @@ For main page UI changes, check all three:
 - [public/styles.css](./public/styles.css)
 - [public/app.js](./public/app.js)
 
+Current layout rule set:
+
+- desktop should prioritize gameplay visibility over side documentation
+- `LAN / log / tips` panels may sit below the main playfield if that preserves board width
+- desktop battlefield lanes are intended to stay visually single-row and compact
+- the user should not need excessive vertical scrolling just to play from hand and choose a common target
+- `attack target` and `spell target` highlights must remain separate states
+- heroes and minions should use consistent target highlight language for the same interaction type
+
 ### Editor Page
 
 For editor changes, check all three:
@@ -296,6 +314,9 @@ After changing code, at least re-check:
 - solo refresh restores progress
 - PvP refresh restores the room or active match
 - narrow mobile layouts do not visibly break
+- desktop play does not require awkward extra scrolling between hand play and common target selection
+- `http://127.0.0.1:3301/` loads
+- `http://127.0.0.1:3301/agents` loads
 
 ## Useful Commands
 
@@ -315,13 +336,20 @@ node --check server.mjs
 ### Start the Server
 
 ```bash
-PORT=3301 npm start
+npm start
+```
+
+Optional custom port:
+
+```bash
+PORT=3400 npm start
 ```
 
 ### Basic Health Checks
 
 ```bash
 curl -I http://127.0.0.1:3301/
+curl -I http://127.0.0.1:3301/agents
 curl http://127.0.0.1:3301/api/healthz
 ```
 

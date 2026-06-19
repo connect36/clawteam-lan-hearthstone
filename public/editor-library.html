@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#11141a" />
+    <title>卡牌库与卡组</title>
+    <meta name="description" content="整理已录入卡牌与任务术卡组。" />
+    <link rel="stylesheet" href="/editor.css" />
+    <link rel="stylesheet" href="/editor-library.css" />
+  </head>
+  <body>
+    <div class="page-shell library-shell">
+      <header class="hero card">
+        <div>
+          <p class="eyebrow">Card Library</p>
+          <h1>卡牌库与卡组</h1>
+          <p class="lede">集中查看所有已经录入的卡牌，并把不同版本的任务术套牌分开保存。</p>
+        </div>
+        <div class="hero-actions">
+          <a class="top-link" href="/editor">返回卡牌编辑器</a>
+          <a class="top-link" href="/">返回游戏</a>
+        </div>
+      </header>
+
+      <main class="library-layout">
+        <section class="card library-section">
+          <div class="panel-head library-head">
+            <div>
+              <p class="section-label">已录入卡牌</p>
+              <h2>全部卡牌库</h2>
+            </div>
+            <div id="library-stats" class="library-stats"></div>
+          </div>
+          <div class="library-filters">
+            <label>
+              <span>搜索</span>
+              <input id="library-search" type="search" placeholder="名称、文本或 DBF ID" />
+            </label>
+            <label>
+              <span>类型</span>
+              <select id="library-type-filter">
+                <option value="all">全部</option>
+                <option value="spell">法术</option>
+                <option value="minion">随从</option>
+              </select>
+            </label>
+            <label>
+              <span>来源</span>
+              <select id="library-source-filter">
+                <option value="all">全部</option>
+                <option value="hearthstone">炉石卡牌</option>
+                <option value="prototype">项目原型卡</option>
+              </select>
+            </label>
+          </div>
+          <div id="library-card-grid" class="library-card-grid"></div>
+        </section>
+
+        <section class="card library-section featured-deck-section">
+          <div class="panel-head library-head">
+            <div>
+              <p class="section-label">本次新卡组</p>
+              <h2 id="featured-deck-name">黑眼任务术</h2>
+            </div>
+            <div class="toolbar-actions">
+              <button id="apply-featured-deck" class="primary-button" type="button">载入这套卡组</button>
+              <button id="copy-featured-code" class="secondary-button" type="button">复制卡组代码</button>
+            </div>
+          </div>
+          <div id="featured-deck-summary" class="deck-summary"></div>
+          <code id="featured-deck-code" class="deck-code-block"></code>
+          <div id="featured-mana-curve" class="mana-curve"></div>
+          <div id="featured-deck-list" class="deck-list"></div>
+          <div id="library-status" class="status-chip library-status">等待操作</div>
+        </section>
+
+        <section class="card library-section">
+          <div class="panel-head library-head">
+            <div>
+              <p class="section-label">套牌归档</p>
+              <h2>已保存卡组</h2>
+            </div>
+          </div>
+          <div id="deck-archive" class="deck-archive"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/editor-library.js"></script>
+  </body>
+</html>

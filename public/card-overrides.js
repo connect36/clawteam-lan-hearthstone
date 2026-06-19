@@ -1,4 +1,7 @@
 const STORAGE_KEY = 'clawteam-lan-hearthstone-card-overrides-v1';
+const CARD_ID_ALIASES = Object.freeze({
+  'hs-42471': 'hs-95688',
+});
 
 function clone(value) {
   if (typeof structuredClone === 'function') return structuredClone(value);
@@ -7,9 +10,20 @@ function clone(value) {
 
 function normalizeOverrideList(raw) {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw.filter((item) => item && item.id);
-  if (typeof raw === 'object') return Object.values(raw).filter((item) => item && item.id);
-  return [];
+  const source = Array.isArray(raw) ? raw : typeof raw === 'object' ? Object.values(raw) : [];
+  const merged = new Map();
+  for (const item of source) {
+    if (!item?.id) continue;
+    const canonicalId = CARD_ID_ALIASES[item.id] || item.id;
+    const migrated = { ...item, id: canonicalId };
+    if (item.id === 'hs-42471') {
+      migrated.dbfId = 95688;
+      migrated.dbfIds = [95688, 42471];
+      migrated.aliases = ['核心版亵渎', '旧版亵渎'];
+    }
+    merged.set(canonicalId, migrated);
+  }
+  return [...merged.values()];
 }
 
 export function loadCardOverrides() {

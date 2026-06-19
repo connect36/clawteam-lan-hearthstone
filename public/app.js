@@ -6,10 +6,12 @@ import {
   createMinionRuntimeState,
   getDisplayKeywords,
   hasKeyword,
+  normalizeKeywords,
   resetMinionForTurn,
   summarizeKeywords,
 } from './keywords.js';
 import { network } from './network.js';
+import { hideBattlegroundsView, renderBattlegroundsView } from './battlegrounds-view.js';
 import './animations.js';
 
 // ============================================
@@ -76,6 +78,382 @@ const SOLO_SCENARIOS = Object.freeze({
 });
 const SOLO_PROGRESS_STORAGE_KEY = 'clawteam-lan-hearthstone-solo-progress-v2';
 const PVP_PROGRESS_STORAGE_KEY = 'clawteam-lan-hearthstone-pvp-progress-v2';
+const BATTLEGROUNDS_PLACEHOLDER_HEROES = Object.freeze([
+  {
+    id: 'afk',
+    name: 'A. F. Kay',
+    armorLabel: '15',
+    note: '先只接护甲与头像表现，英雄技能后续补齐',
+  },
+  {
+    id: 'patches',
+    name: 'Patches the Pirate',
+    armorLabel: '12',
+    note: '海盗经济流视觉预演',
+  },
+  {
+    id: 'alakir',
+    name: "Al'Akir",
+    armorLabel: '15',
+    note: '战斗剧场会优先展示圣盾与风怒感',
+  },
+  {
+    id: 'ragnaros',
+    name: 'Ragnaros',
+    armorLabel: '18',
+    note: '元素构筑预演英雄',
+  },
+  {
+    id: 'tess',
+    name: 'Tess Greymane',
+    armorLabel: '17',
+    note: '后续可承接对手复制与商店玩法',
+  },
+  {
+    id: 'galakrond',
+    name: 'Galakrond',
+    armorLabel: '14',
+    note: '先作为完整英雄池占位的一部分保留',
+  },
+]);
+
+const BATTLEGROUNDS_PREVIEW_SCENARIOS = Object.freeze([
+  {
+    id: 'pirate-economy',
+    label: '海盗经济线',
+    round: 6,
+    gold: 9,
+    tavernTier: 4,
+    tavernUpgradeCost: 8,
+    timerSeconds: 62,
+    playerHealth: 37,
+    playerArmor: 15,
+    opponentHero: {
+      name: 'Ragnaros',
+      armor: 18,
+      health: 34,
+      theme: 'elemental',
+      note: '上回合铺出双元素成长线',
+    },
+    shop: [
+      {
+        tier: 1,
+        cost: 3,
+        name: 'Minted Corsair',
+        tribe: 'Pirate',
+        attack: 1,
+        health: 3,
+        text: 'When you sell this, get a Tavern Coin.',
+        tags: ['Economy'],
+      },
+      {
+        tier: 3,
+        cost: 3,
+        name: 'Peggy Sturdybone',
+        tribe: 'Pirate',
+        attack: 2,
+        health: 1,
+        text: 'Whenever a card is added to your hand, give another friendly Pirate +2/+1.',
+        tags: ['Scaling'],
+      },
+      {
+        tier: 4,
+        cost: 3,
+        name: 'Underhanded Dealer',
+        tribe: 'Pirate',
+        attack: 6,
+        health: 6,
+        text: 'After you gain Gold, gain +2/+2.',
+        tags: ['Scaling'],
+      },
+      {
+        tier: 5,
+        cost: 3,
+        name: 'Visionary Shipman',
+        tribe: 'Pirate',
+        attack: 5,
+        health: 5,
+        text: 'After you gain Gold 5 times, get a random Tavern spell. (5 left!)',
+        tags: ['Spell'],
+      },
+      {
+        tier: 5,
+        cost: 3,
+        name: 'Cannon Corsair',
+        tribe: 'Pirate',
+        attack: 3,
+        health: 7,
+        text: 'After you gain Gold, give your other Pirates +1/+1.',
+        tags: ['Aura'],
+      },
+    ],
+    reserve: [
+      { name: 'Minted Corsair', tribe: 'Pirate', attack: 1, health: 3, tags: ['Coin'] },
+      { name: 'Gunpowder Courier', tribe: 'Pirate', attack: 2, health: 6, tags: ['Buff'] },
+      { name: 'Tavern Spell', tribe: 'Spell', attack: null, health: null, tags: ['Reserve Prices'] },
+    ],
+    board: [
+      { name: 'Peggy Sturdybone', tribe: 'Pirate', attack: 10, health: 8, tags: ['Support'] },
+      { name: 'Underhanded Dealer', tribe: 'Pirate', attack: 14, health: 14, tags: ['Carry'] },
+      { name: 'Gunpowder Courier', tribe: 'Pirate', attack: 2, health: 6, tags: ['Buff'] },
+      { name: 'Cannon Corsair', tribe: 'Pirate', attack: 9, health: 13, tags: ['Team Buff'] },
+      { name: 'Visionary Shipman', tribe: 'Pirate', attack: 7, health: 7, tags: ['Spell Value'] },
+    ],
+    combat: {
+      resultLabel: '上回合获胜',
+      resultText: '对手被压到 34 血，海盗经济线已经开始滚雪球。',
+      friendly: [
+        { name: 'Peggy', tribe: 'Pirate', attack: 10, health: 8, tags: ['Backline'] },
+        { name: 'Dealer', tribe: 'Pirate', attack: 14, health: 14, tags: ['Core'] },
+        { name: 'Corsair', tribe: 'Pirate', attack: 9, health: 13, tags: ['Buff'] },
+      ],
+      enemy: [
+        { name: 'Waveling', tribe: 'Elemental', attack: 6, health: 1, tags: ['Deathrattle'] },
+        { name: 'Nomi', tribe: 'Elemental', attack: 6, health: 6, tags: ['Shop Scaling'] },
+        { name: 'Acid Rainfall', tribe: 'Elemental', attack: 8, health: 8, tags: ['Carry'] },
+      ],
+    },
+  },
+  {
+    id: 'elemental-refresh',
+    label: '元素刷新线',
+    round: 8,
+    gold: 10,
+    tavernTier: 5,
+    tavernUpgradeCost: 9,
+    timerSeconds: 54,
+    playerHealth: 33,
+    playerArmor: 18,
+    opponentHero: {
+      name: 'Patches the Pirate',
+      armor: 12,
+      health: 29,
+      theme: 'pirate',
+      note: '海盗局面转入战斗回合',
+    },
+    shop: [
+      {
+        tier: 3,
+        cost: 3,
+        name: 'Waveling',
+        tribe: 'Elemental',
+        attack: 6,
+        health: 1,
+        text: 'Deathrattle: After the Tavern is Refreshed this game, give its right-most minion +3/+3.',
+        tags: ['Deathrattle'],
+      },
+      {
+        tier: 4,
+        cost: 3,
+        name: 'En-Djinn Blazer',
+        tribe: 'Elemental',
+        attack: 4,
+        health: 4,
+        text: 'Battlecry: After the Tavern is Refreshed this game, give its right-most minion +7/+7.',
+        tags: ['Battlecry'],
+      },
+      {
+        tier: 5,
+        cost: 3,
+        name: 'Unleashed Mana Surge',
+        tribe: 'Elemental',
+        attack: 5,
+        health: 4,
+        text: 'After you play an Elemental, give your Elementals +2/+2.',
+        tags: ['Scaling'],
+      },
+      {
+        tier: 5,
+        cost: 3,
+        name: 'Nomi, Kitchen Nightmare',
+        tribe: 'Elemental',
+        attack: 6,
+        health: 6,
+        text: 'After you play an Elemental, give Elementals in the Tavern +3/+3 this game.',
+        tags: ['Shop Buff'],
+      },
+      {
+        tier: 6,
+        cost: 3,
+        name: 'Acid Rainfall',
+        tribe: 'Elemental',
+        attack: 8,
+        health: 8,
+        text: 'After you Refresh 5 times, gain the stats of the right-most minion in the Tavern. (5 left!)',
+        tags: ['Carry'],
+      },
+    ],
+    reserve: [
+      { name: 'Air Revenant', tribe: 'Elemental', attack: 3, health: 6, tags: ['Spell'] },
+      { name: 'Easterly Winds', tribe: 'Spell', attack: null, health: null, tags: ['Generated'] },
+      { name: 'Refresh', tribe: 'Action', attack: null, health: null, tags: ['5 left'] },
+    ],
+    board: [
+      { name: 'Waveling', tribe: 'Elemental', attack: 11, health: 6, tags: ['Token Line'] },
+      { name: 'En-Djinn Blazer', tribe: 'Elemental', attack: 10, health: 10, tags: ['Battlecry'] },
+      { name: 'Mana Surge', tribe: 'Elemental', attack: 9, health: 10, tags: ['Aura'] },
+      { name: 'Nomi', tribe: 'Elemental', attack: 6, health: 6, tags: ['Engine'] },
+      { name: 'Acid Rainfall', tribe: 'Elemental', attack: 22, health: 22, tags: ['Carry'] },
+    ],
+    combat: {
+      resultLabel: '战斗预演',
+      resultText: '中央剧场用来承接后续自动攻击、亡语、复生与战斗日志动画。',
+      friendly: [
+        { name: 'Waveling', tribe: 'Elemental', attack: 11, health: 6, tags: ['Deathrattle'] },
+        { name: 'Acid Rainfall', tribe: 'Elemental', attack: 22, health: 22, tags: ['Carry'] },
+        { name: 'Nomi', tribe: 'Elemental', attack: 6, health: 6, tags: ['Engine'] },
+      ],
+      enemy: [
+        { name: 'Peggy', tribe: 'Pirate', attack: 8, health: 6, tags: ['Backline'] },
+        { name: 'Dealer', tribe: 'Pirate', attack: 12, health: 12, tags: ['Scaling'] },
+        { name: 'Tethys', tribe: 'Pirate', attack: 5, health: 6, tags: ['Value'] },
+      ],
+    },
+  },
+  {
+    id: 'hybrid-showcase',
+    label: '混编展示',
+    round: 9,
+    gold: 11,
+    tavernTier: 6,
+    tavernUpgradeCost: '已满本',
+    timerSeconds: 48,
+    playerHealth: 30,
+    playerArmor: 14,
+    opponentHero: {
+      name: 'Tess Greymane',
+      armor: 17,
+      health: 26,
+      theme: 'hybrid',
+      note: '准备接对手复制与战斗承接位',
+    },
+    shop: [
+      {
+        tier: 4,
+        cost: 3,
+        name: 'Flaming Enforcer',
+        tribe: 'Demon / Elemental',
+        attack: 4,
+        health: 5,
+        text: 'At the end of your turn, consume the highest-Health minion in the Tavern to gain its stats.',
+        tags: ['Hybrid'],
+      },
+      {
+        tier: 6,
+        cost: 3,
+        name: 'Shore Marauder',
+        tribe: 'Elemental / Pirate',
+        attack: 4,
+        health: 5,
+        text: 'Your Pirates and Elementals give an extra +1/+1.',
+        tags: ['Bridge'],
+      },
+      {
+        tier: 6,
+        cost: 3,
+        name: 'Fleet Admiral Tethys',
+        tribe: 'Pirate',
+        attack: 5,
+        health: 6,
+        text: 'After you spend 10 Gold, get a random Pirate. (10 left!)',
+        tags: ['Value'],
+      },
+      {
+        tier: 5,
+        cost: 3,
+        name: 'Unleashed Mana Surge',
+        tribe: 'Elemental',
+        attack: 5,
+        health: 4,
+        text: 'After you play an Elemental, give your Elementals +2/+2.',
+        tags: ['Scaling'],
+      },
+      {
+        tier: 3,
+        cost: 3,
+        name: 'Stellar Freebooter',
+        tribe: 'Pirate',
+        attack: 7,
+        health: 3,
+        text: 'Taunt. Deathrattle: Give another friendly Pirate Health equal to this minion\'s Attack.',
+        tags: ['Taunt', 'Deathrattle'],
+      },
+    ],
+    reserve: [
+      { name: 'Tavern Coin', tribe: 'Spell', attack: null, health: null, tags: ['Economy'] },
+      { name: 'Tavern Coin', tribe: 'Spell', attack: null, health: null, tags: ['Economy'] },
+      { name: 'Random Pirate', tribe: 'Generated', attack: null, health: null, tags: ['Tethys'] },
+    ],
+    board: [
+      { name: 'Shore Marauder', tribe: 'Hybrid', attack: 12, health: 11, tags: ['Bridge'] },
+      { name: 'Underhanded Dealer', tribe: 'Pirate', attack: 16, health: 16, tags: ['Carry'] },
+      { name: 'Unleashed Mana Surge', tribe: 'Elemental', attack: 11, health: 12, tags: ['Aura'] },
+      { name: 'Acid Rainfall', tribe: 'Elemental', attack: 24, health: 24, tags: ['Carry'] },
+      { name: 'Fleet Admiral Tethys', tribe: 'Pirate', attack: 8, health: 9, tags: ['Value'] },
+    ],
+    combat: {
+      resultLabel: '混编对撞',
+      resultText: '这里的布局会作为后续正式战斗动画与结算 HUD 的外观模板。',
+      friendly: [
+        { name: 'Marauder', tribe: 'Hybrid', attack: 12, health: 11, tags: ['Bridge'] },
+        { name: 'Dealer', tribe: 'Pirate', attack: 16, health: 16, tags: ['Carry'] },
+        { name: 'Rainfall', tribe: 'Elemental', attack: 24, health: 24, tags: ['Carry'] },
+      ],
+      enemy: [
+        { name: 'Freebooter', tribe: 'Pirate', attack: 7, health: 3, tags: ['Taunt'] },
+        { name: 'Blazer', tribe: 'Elemental', attack: 10, health: 10, tags: ['Battlecry'] },
+        { name: 'Nomi', tribe: 'Elemental', attack: 6, health: 6, tags: ['Engine'] },
+      ],
+    },
+  },
+]);
+
+const BATTLEGROUNDS_TAVERN_ONE_POOL = Object.freeze([
+  {
+    id: 'bg-t1-minted-corsair',
+    tier: 1,
+    cost: 3,
+    name: 'Minted Corsair',
+    tribe: 'Pirate',
+    attack: 1,
+    health: 3,
+    text: 'When you sell this, get a Tavern Coin.',
+    tags: ['Economy'],
+  },
+  {
+    id: 'bg-t1-aureate-laureate',
+    tier: 1,
+    cost: 3,
+    name: 'Aureate Laureate',
+    tribe: 'Pirate',
+    attack: 1,
+    health: 1,
+    text: 'Divine Shield. Battlecry: Make this minion Golden.',
+    tags: ['Divine Shield'],
+  },
+  {
+    id: 'bg-t1-crackling-cyclone',
+    tier: 1,
+    cost: 3,
+    name: 'Crackling Cyclone',
+    tribe: 'Elemental',
+    attack: 2,
+    health: 1,
+    text: 'Divine Shield. Windfury.',
+    tags: ['Windfury'],
+  },
+  {
+    id: 'bg-t1-dune-dweller',
+    tier: 1,
+    cost: 3,
+    name: 'Dune Dweller',
+    tribe: 'Elemental',
+    attack: 3,
+    health: 2,
+    text: 'Battlecry: Give Elementals in the Tavern stats this game.',
+    tags: ['Battlecry'],
+  },
+]);
 
 // ============================================
 // DOM元素
@@ -91,6 +469,7 @@ const elements = {
 
   // 模式选择按钮
   btnPvp: document.getElementById('btn-pvp'),
+  btnBattlegrounds: document.getElementById('btn-battlegrounds'),
 
   // PvP选择页面
   btnCreateRoom: document.getElementById('btn-create-room'),
@@ -196,8 +575,33 @@ const state = {
     opponent: null, // 对手数据（统一格式）
   },
 
+  battlegrounds: {
+    phase: 'hero-select',
+    round: 1,
+    previewIndex: 0,
+    selectedHeroId: '',
+    heroChoices: [],
+    gold: 3,
+    tavernTier: 1,
+    tavernUpgradeCost: 5,
+    isFrozen: false,
+    timerSeconds: 45,
+    playerHealth: 40,
+    playerArmor: 0,
+    opponentHero: null,
+    shopSlots: 3,
+    maxBoardSlots: 7,
+    maxHandSlots: 10,
+    refreshCost: 1,
+    reservePreview: [],
+    shopPreview: [],
+    boardPreview: [],
+    combatPreview: null,
+    log: [],
+  },
+
   // 当前模式
-  mode: 'menu', // 'menu' | 'solo' | 'pvp'
+  mode: 'menu', // 'menu' | 'solo' | 'pvp' | 'battlegrounds'
 };
 
 // ============================================
@@ -250,20 +654,28 @@ function shuffle(list) {
   return copy;
 }
 
+function isQuestlineCard(card) {
+  return (card.mechanics || []).includes('questline');
+}
+
 function buildDeck() {
-  const expanded = [];
+  const questCards = [];
+  const normalCards = [];
   for (const base of effectiveCards) {
     if (!base.enabled) continue;
     const copies = Math.max(0, Number.parseInt(base.deckCount ?? 0, 10) || 0);
     if (!copies) continue;
     for (let count = 0; count < copies; count += 1) {
-      expanded.push({
-        ...base,
-        instanceId: uid(`card-${base.id}`),
-      });
+      const instance = { ...base, instanceId: uid(`card-${base.id}`) };
+      if (isQuestlineCard(base)) {
+        questCards.push(instance);
+      } else {
+        normalCards.push(instance);
+      }
     }
   }
-  return shuffle(expanded);
+  // 任务牌不参与洗牌，放在牌库末尾（起始抽牌前会提到手牌）
+  return [...shuffle(normalCards), ...questCards];
 }
 
 function cloneMinion(source, side, overrides = {}) {
@@ -280,6 +692,8 @@ function cloneMinion(source, side, overrides = {}) {
     sourceId: source.id || source.name || `${side}-token`,
     name: overrides.name || source.name || 'Nameless Minion',
     text: overrides.text ?? source.text ?? buildKeywordText(keywords),
+    effects: cloneValue(overrides.effects ?? source.effects ?? []),
+    mechanics: cloneValue(overrides.mechanics ?? source.mechanics ?? []),
     attack,
     health,
     maxHealth: health,
@@ -332,6 +746,8 @@ function updateAppUrl(mode = 'menu', extra = {}) {
     if (roomId) {
       url.searchParams.set('room', roomId);
     }
+  } else if (mode === 'battlegrounds') {
+    url.searchParams.set('mode', 'battlegrounds');
   }
 
   window.history.replaceState({}, '', `${url.pathname}${url.search}`);
@@ -402,6 +818,11 @@ function attemptInitialResume() {
     return;
   }
 
+  if (requestedMode === 'battlegrounds') {
+    startBattlegroundsMode();
+    return;
+  }
+
   if (requestedMode === 'pvp') {
     savePvpProgress('resume-requested');
     return;
@@ -421,6 +842,7 @@ function showLobbyOverlay(options = {}) {
   const preserveUrl = options.preserveUrl === true;
   clearOpeningAnnouncement();
   elements.lobbyOverlay.style.display = 'flex';
+  hideBattlegroundsView(elements.gameArea);
   if (elements.gameArea) {
     elements.gameArea.style.display = '';
   }
@@ -608,6 +1030,10 @@ function setupLobbyEvents() {
     showPvPSelect();
   });
 
+  elements.btnBattlegrounds?.addEventListener('click', () => {
+    startBattlegroundsMode();
+  });
+
   // PvP选择页面 - 创建房间
   elements.btnCreateRoom?.addEventListener('click', () => {
     showCreateRoomSection();
@@ -772,6 +1198,25 @@ function setupNetworkListeners() {
 // 单机模式
 // ============================================
 
+function ensureQuestlineInOpeningHand(scenario) {
+  // 把任务牌从牌库提到手牌最前面
+  const deck = state.solo.player.deck;
+  const hand = state.solo.player.hand;
+  const questIndices = [];
+  for (let i = deck.length - 1; i >= 0; i--) {
+    if (isQuestlineCard(deck[i])) {
+      questIndices.push(i);
+    }
+  }
+  for (const idx of questIndices) {
+    const [questCard] = deck.splice(idx, 1);
+    hand.unshift(questCard);
+  }
+  // 任务牌不占手牌上限，从手牌上限中扣除
+  const normalDraw = Math.max(0, (scenario.player.handSize || 3) - questIndices.length);
+  return { questCount: questIndices.length, normalDraw };
+}
+
 function startSoloMode(scenarioId = 'boss') {
   state.solo.scenarioId = SOLO_SCENARIOS[scenarioId] ? scenarioId : 'boss';
   const scenario = getSoloScenario();
@@ -780,7 +1225,8 @@ function startSoloMode(scenarioId = 'boss') {
   updateAppUrl('solo', { scenarioId: state.solo.scenarioId });
 
   initSoloState();
-  drawCards(scenario.player.handSize);
+  const { normalDraw } = ensureQuestlineInOpeningHand(scenario);
+  drawCards(normalDraw);
   if (getSoloTurnLimit()) {
     pushSoloLog(`战斗开始。目标：在 ${getSoloTurnLimit()} 回合内击败 ${state.solo.boss.heroName}。`);
   } else {
@@ -811,6 +1257,16 @@ function initSoloState() {
     deck: playerDeck,
     hand: [],
     board: [],
+    runtime: {
+      selfDamageThisTurn: 0,
+      selfDamageThisGame: 0,
+      damageTakenThisTurn: 0,
+      healthChangesThisTurn: 0,
+      questline: null,
+      redirectSelfDamage: false,
+      delayedDamage: [],
+      deadFriendlyMinions: [],
+    },
   };
 
   state.solo.boss = {
@@ -857,6 +1313,628 @@ function startPvpMode(gameState) {
     state.pvp.activePlayerId === state.pvp.mySocketId ? '你的回合' : '对手先行动',
     { durationMs: 1200 }
   );
+}
+
+// ============================================
+// 酒馆战棋模式
+// ============================================
+
+function buildBattlegroundsShopPreview(seed = 0) {
+  const scenario = BATTLEGROUNDS_PREVIEW_SCENARIOS[seed % BATTLEGROUNDS_PREVIEW_SCENARIOS.length];
+  return scenario.shop.map((card) => ({ ...card }));
+}
+
+function buildBattlegroundsBoardPreview(seed = 0) {
+  const scenario = BATTLEGROUNDS_PREVIEW_SCENARIOS[seed % BATTLEGROUNDS_PREVIEW_SCENARIOS.length];
+  return scenario.board.map((card) => ({ ...card }));
+}
+
+function buildBattlegroundsReservePreview(seed = 0) {
+  const scenario = BATTLEGROUNDS_PREVIEW_SCENARIOS[seed % BATTLEGROUNDS_PREVIEW_SCENARIOS.length];
+  return scenario.reserve.map((card) => ({ ...card }));
+}
+
+function buildBattlegroundsCombatPreview(seed = 0) {
+  const scenario = BATTLEGROUNDS_PREVIEW_SCENARIOS[seed % BATTLEGROUNDS_PREVIEW_SCENARIOS.length];
+  return {
+    ...scenario.combat,
+    friendly: scenario.combat.friendly.map((card) => ({ ...card })),
+    enemy: scenario.combat.enemy.map((card) => ({ ...card })),
+  };
+}
+
+function cloneBattlegroundsCombatMinion(card, side, index) {
+  const attack = Number(card?.attack) || 0;
+  const health = Number(card?.health) || 0;
+  const maxHealth = Number(card?.maxHealth);
+  return {
+    ...card,
+    instanceId: card?.instanceId || `bg-combat-${side}-${index}`,
+    combatSide: side,
+    combatIndex: index,
+    startingHealth: health,
+    health,
+    maxHealth: Number.isFinite(maxHealth) ? Math.max(maxHealth, health) : health,
+    attack,
+    alive: health > 0,
+    highlighted: false,
+    damageTaken: 0,
+  };
+}
+
+function getBattlegroundsCombatSourceBoard(sourceBoard = [], side) {
+  return sourceBoard.map((card, index) => cloneBattlegroundsCombatMinion(card, side, index));
+}
+
+function findBattlegroundsNextLivingIndex(board, startIndex = 0) {
+  if (!Array.isArray(board) || !board.length) return -1;
+  for (let index = Math.max(0, startIndex); index < board.length; index += 1) {
+    if (board[index]?.health > 0) return index;
+  }
+  for (let index = 0; index < Math.max(0, startIndex); index += 1) {
+    if (board[index]?.health > 0) return index;
+  }
+  return -1;
+}
+
+function sumBattlegroundsBoardAttack(board) {
+  return (board || []).reduce((total, minion) => total + Math.max(0, Number(minion?.attack) || 0), 0);
+}
+
+function applyBattlegroundsHeroDamage(hero, amount) {
+  if (!hero || amount <= 0) {
+    return { absorbed: 0, healthLoss: 0, total: 0 };
+  }
+  const absorbed = Math.min(Number(hero.armor) || 0, amount);
+  hero.armor = Math.max(0, (Number(hero.armor) || 0) - absorbed);
+  const healthLoss = amount - absorbed;
+  hero.health = Math.max(0, (Number(hero.health) || 0) - healthLoss);
+  return { absorbed, healthLoss, total: amount };
+}
+
+function createBattlegroundsInstance(card, source = 'shop') {
+  return {
+    ...card,
+    instanceId: `bg-${source}-${Math.random().toString(36).slice(2, 10)}`,
+  };
+}
+
+function captureBattlegroundsElementRects(selector, attributeName) {
+  if (!elements.gameArea) return {};
+  return Array.from(elements.gameArea.querySelectorAll(selector)).reduce((accumulator, element) => {
+    const key = element.getAttribute(attributeName);
+    if (!key) return accumulator;
+    accumulator[key] = element.getBoundingClientRect();
+    return accumulator;
+  }, {});
+}
+
+function captureBattlegroundsPoint(selector) {
+  const element = elements.gameArea?.querySelector(selector);
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+}
+
+function animateBattlegroundsReflow(previousRects, selector, attributeName, options = {}) {
+  if (!previousRects || !elements.gameArea) return;
+  for (const element of elements.gameArea.querySelectorAll(selector)) {
+    const key = element.getAttribute(attributeName);
+    const previousRect = key ? previousRects[key] : null;
+    if (!previousRect || typeof element.animate !== 'function') continue;
+
+    const nextRect = element.getBoundingClientRect();
+    const dx = previousRect.left - nextRect.left;
+    const dy = previousRect.top - nextRect.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+
+    element.animate(
+      [
+        { transform: `translate3d(${dx}px, ${dy}px, 0)` },
+        { transform: 'translate3d(0, 0, 0)' },
+      ],
+      {
+        duration: options.durationMs || 320,
+        easing: options.easing || 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+        fill: 'both',
+      }
+    );
+  }
+}
+
+function pulseBattlegroundsStats(selector) {
+  if (!selector || !elements.gameArea) return;
+  for (const chip of elements.gameArea.querySelectorAll(selector)) {
+    animator?.pulseStat?.(chip, { durationMs: 260 });
+  }
+}
+
+function runBattlegroundsAnimationPlan(plan) {
+  if (!plan) return;
+  window.requestAnimationFrame(() => {
+    plan.reflows?.forEach((entry) => {
+      animateBattlegroundsReflow(entry.previousRects, entry.selector, entry.attributeName, entry.options);
+    });
+
+    if (plan.transfer?.targetSelector && plan.transfer.fromPoint) {
+      animator?.flingCard?.(plan.transfer.targetSelector, {
+        from: plan.transfer.fromPoint,
+        durationMs: plan.transfer.durationMs || 360,
+        lift: plan.transfer.lift ?? 28,
+        rotate: plan.transfer.rotate ?? 4,
+      });
+      window.setTimeout(() => pulseBattlegroundsStats(plan.transfer.statSelector), 110);
+    }
+  });
+}
+
+function drawBattlegroundsTavernOneShop(count = 3) {
+  const nextShop = [];
+  for (let index = 0; index < count; index += 1) {
+    const baseCard = BATTLEGROUNDS_TAVERN_ONE_POOL[Math.floor(Math.random() * BATTLEGROUNDS_TAVERN_ONE_POOL.length)];
+    nextShop.push(createBattlegroundsInstance(baseCard));
+  }
+  return nextShop;
+}
+
+function applyBattlegroundsPreviewScenario(index = 0) {
+  const scenario = BATTLEGROUNDS_PREVIEW_SCENARIOS[index % BATTLEGROUNDS_PREVIEW_SCENARIOS.length];
+  state.battlegrounds.previewIndex = index % BATTLEGROUNDS_PREVIEW_SCENARIOS.length;
+  state.battlegrounds.round = scenario.round;
+  state.battlegrounds.gold = scenario.gold;
+  state.battlegrounds.tavernTier = scenario.tavernTier;
+  state.battlegrounds.tavernUpgradeCost = scenario.tavernUpgradeCost;
+  state.battlegrounds.timerSeconds = scenario.timerSeconds;
+  state.battlegrounds.playerHealth = scenario.playerHealth;
+  state.battlegrounds.playerArmor = scenario.playerArmor;
+  state.battlegrounds.opponentHero = { ...scenario.opponentHero };
+  state.battlegrounds.reservePreview = buildBattlegroundsReservePreview(index);
+  state.battlegrounds.shopPreview = buildBattlegroundsShopPreview(index).map((card) => ({
+    ...card,
+    frozen: state.battlegrounds.isFrozen,
+  }));
+  state.battlegrounds.boardPreview = buildBattlegroundsBoardPreview(index);
+  state.battlegrounds.combatPreview = buildBattlegroundsCombatPreview(index);
+}
+
+function initBattlegroundsState() {
+  state.battlegrounds.phase = 'hero-select';
+  state.battlegrounds.previewIndex = 0;
+  state.battlegrounds.selectedHeroId = '';
+  state.battlegrounds.heroChoices = shuffle(BATTLEGROUNDS_PLACEHOLDER_HEROES).slice(0, 4);
+  state.battlegrounds.isFrozen = false;
+  state.battlegrounds.shopSlots = 3;
+  state.battlegrounds.maxBoardSlots = 7;
+  state.battlegrounds.maxHandSlots = 10;
+  state.battlegrounds.refreshCost = 1;
+  applyBattlegroundsPreviewScenario(0);
+  state.battlegrounds.log = [
+    '已进入酒馆战棋独立路由。',
+    'S12 赛季末海盗 / 元素首期池已接到视觉壳里，等待你核对。',
+    '当前仍然不做淘汰 / 出局，后续再补。',
+  ];
+}
+
+function startBattlegroundsMode() {
+  state.mode = 'battlegrounds';
+  hideLobbyOverlay();
+  updateAppUrl('battlegrounds');
+  initBattlegroundsState();
+  renderBattlegrounds();
+}
+
+function selectBattlegroundsHero(heroId) {
+  state.battlegrounds.selectedHeroId = heroId;
+  renderBattlegrounds();
+}
+
+function enterBattlegroundsTierOneRecruit() {
+  const selectedHero = state.battlegrounds.heroChoices.find((hero) => hero.id === state.battlegrounds.selectedHeroId) || null;
+  state.battlegrounds.phase = 'recruit';
+  state.battlegrounds.round = 1;
+  state.battlegrounds.gold = 3;
+  state.battlegrounds.tavernTier = 1;
+  state.battlegrounds.tavernUpgradeCost = 5;
+  state.battlegrounds.timerSeconds = 107;
+  state.battlegrounds.playerHealth = 40;
+  state.battlegrounds.playerArmor = Number(selectedHero?.armorLabel || 0) || 0;
+  state.battlegrounds.reservePreview = [];
+  state.battlegrounds.boardPreview = [];
+  state.battlegrounds.shopSlots = 3;
+  state.battlegrounds.refreshCost = 1;
+  state.battlegrounds.combatPreview = null;
+  state.battlegrounds.opponentHero = {
+    name: 'Next Opponent',
+    armor: 0,
+    health: 40,
+    theme: 'neutral',
+    note: '首回合不展示战斗对撞，只完成一级酒馆招募。',
+  };
+  state.battlegrounds.shopPreview = drawBattlegroundsTavernOneShop(state.battlegrounds.shopSlots).map((card) => ({
+    ...card,
+    frozen: state.battlegrounds.isFrozen,
+  }));
+  state.battlegrounds.log = [
+    `已锁定英雄：${selectedHero?.name || '未知英雄'}`,
+    '一级酒馆已展开：3 金币、3 个商店随从、空战队、空手牌。',
+    '当前可进行刷新、冻结、购买和上场操作。',
+  ];
+}
+
+function confirmBattlegroundsHero() {
+  if (!state.battlegrounds.selectedHeroId) return;
+  enterBattlegroundsTierOneRecruit();
+  renderBattlegrounds();
+}
+
+function refreshBattlegroundsShell() {
+  if (state.battlegrounds.phase !== 'recruit') return;
+  if (state.battlegrounds.gold < state.battlegrounds.refreshCost) {
+    state.battlegrounds.log = [
+      '金币不足，无法刷新一级酒馆。',
+      `当前金币：${state.battlegrounds.gold}`,
+    ];
+    renderBattlegrounds();
+    return;
+  }
+  if (state.battlegrounds.isFrozen) {
+    state.battlegrounds.log = [
+      '酒馆已冻结，先取消冻结再刷新。',
+      '冻结状态会保留当前商店。',
+    ];
+    renderBattlegrounds();
+    return;
+  }
+
+  state.battlegrounds.gold -= state.battlegrounds.refreshCost;
+  state.battlegrounds.shopPreview = drawBattlegroundsTavernOneShop(state.battlegrounds.shopSlots).map((card) => ({
+    ...card,
+    frozen: false,
+  }));
+  state.battlegrounds.log = [
+    '已刷新一级酒馆商店。',
+    `剩余金币：${state.battlegrounds.gold}`,
+  ];
+  renderBattlegrounds();
+}
+
+function toggleBattlegroundsFreeze() {
+  if (state.battlegrounds.phase !== 'recruit') return;
+  state.battlegrounds.isFrozen = !state.battlegrounds.isFrozen;
+  state.battlegrounds.shopPreview = state.battlegrounds.shopPreview.map((card) => ({
+    ...card,
+    frozen: state.battlegrounds.isFrozen,
+  }));
+  state.battlegrounds.log = [
+    state.battlegrounds.isFrozen ? '已切换到冻结预览状态。' : '已取消冻结预览状态。',
+    '正式冻结逻辑会在招募引擎接入后替换当前占位行为。',
+  ];
+  renderBattlegrounds();
+}
+
+function buyBattlegroundsShopCard(shopIndex) {
+  if (state.battlegrounds.phase !== 'recruit') return;
+  const selectedCard = state.battlegrounds.shopPreview[shopIndex];
+  if (!selectedCard) return;
+  if (state.battlegrounds.gold < (selectedCard.cost ?? 3)) {
+    state.battlegrounds.log = [
+      `${selectedCard.name} 购买失败：金币不足。`,
+      `当前金币：${state.battlegrounds.gold}`,
+    ];
+    renderBattlegrounds();
+    return;
+  }
+  if (state.battlegrounds.reservePreview.length >= state.battlegrounds.maxHandSlots) {
+    state.battlegrounds.log = ['手牌已满，暂时无法购买新的随从。'];
+    renderBattlegrounds();
+    return;
+  }
+
+  const handRectsBefore = captureBattlegroundsElementRects('[data-bg-hand-id]', 'data-bg-hand-id');
+  const shopPoint = captureBattlegroundsPoint(`[data-bg-shop-id="${selectedCard.instanceId}"]`);
+  const purchasedCard = createBattlegroundsInstance(selectedCard, 'hand');
+  state.battlegrounds.gold -= selectedCard.cost ?? 3;
+  state.battlegrounds.reservePreview = [...state.battlegrounds.reservePreview, purchasedCard];
+  state.battlegrounds.shopPreview = state.battlegrounds.shopPreview.map((card, index) => (
+    index === shopIndex ? null : card
+  ));
+  state.battlegrounds.log = [
+    `已购买 ${selectedCard.name}，进入手牌。`,
+    `剩余金币：${state.battlegrounds.gold}`,
+  ];
+  renderBattlegrounds({
+    reflows: [
+      {
+        previousRects: handRectsBefore,
+        selector: '[data-bg-hand-id]',
+        attributeName: 'data-bg-hand-id',
+      },
+    ],
+    transfer: {
+      fromPoint: shopPoint,
+      targetSelector: `[data-bg-hand-id="${purchasedCard.instanceId}"]`,
+      statSelector: `[data-bg-hand-id="${purchasedCard.instanceId}"] [data-bg-stat-kind]`,
+      durationMs: 380,
+    },
+  });
+}
+
+function playBattlegroundsHandCard(handIndex) {
+  if (state.battlegrounds.phase !== 'recruit') return;
+  const selectedCard = state.battlegrounds.reservePreview[handIndex];
+  if (!selectedCard) return;
+  if (state.battlegrounds.boardPreview.length >= state.battlegrounds.maxBoardSlots) {
+    state.battlegrounds.log = ['战队已满，无法继续上场。'];
+    renderBattlegrounds();
+    return;
+  }
+
+  const boardRectsBefore = captureBattlegroundsElementRects('[data-bg-board-id]', 'data-bg-board-id');
+  const handRectsBefore = captureBattlegroundsElementRects('[data-bg-hand-id]', 'data-bg-hand-id');
+  const handPoint = captureBattlegroundsPoint(`[data-bg-hand-id="${selectedCard.instanceId}"]`);
+  const boardedCard = createBattlegroundsInstance(selectedCard, 'board');
+  state.battlegrounds.boardPreview = [...state.battlegrounds.boardPreview, boardedCard];
+  state.battlegrounds.reservePreview = state.battlegrounds.reservePreview.filter((_, index) => index !== handIndex);
+  state.battlegrounds.log = [
+    `已将 ${selectedCard.name} 上场。`,
+    `当前战队随从数：${state.battlegrounds.boardPreview.length}`,
+  ];
+  renderBattlegrounds({
+    reflows: [
+      {
+        previousRects: boardRectsBefore,
+        selector: '[data-bg-board-id]',
+        attributeName: 'data-bg-board-id',
+      },
+      {
+        previousRects: handRectsBefore,
+        selector: '[data-bg-hand-id]',
+        attributeName: 'data-bg-hand-id',
+      },
+    ],
+    transfer: {
+      fromPoint: handPoint,
+      targetSelector: `[data-bg-board-id="${boardedCard.instanceId}"]`,
+      statSelector: `[data-bg-board-id="${boardedCard.instanceId}"] [data-bg-stat-kind]`,
+      durationMs: 420,
+      lift: 36,
+      rotate: 3,
+    },
+  });
+}
+
+function resolveBattlegroundsCombat() {
+  const previewIndex = state.battlegrounds.previewIndex % BATTLEGROUNDS_PREVIEW_SCENARIOS.length;
+  const scenario = BATTLEGROUNDS_PREVIEW_SCENARIOS[previewIndex];
+  const recruitBoard = getBattlegroundsCombatSourceBoard(state.battlegrounds.boardPreview, 'friendly');
+  const enemySourceBoard = state.battlegrounds.combatPreview?.enemy?.length
+    ? state.battlegrounds.combatPreview.enemy
+    : scenario.combat.enemy;
+  const friendlyBoard = recruitBoard;
+  const enemyBoard = getBattlegroundsCombatSourceBoard(enemySourceBoard, 'enemy');
+  const friendlyHero = {
+    name: 'You',
+    health: Number(state.battlegrounds.playerHealth) || 0,
+    armor: Number(state.battlegrounds.playerArmor) || 0,
+  };
+  const enemyHero = {
+    name: state.battlegrounds.opponentHero?.name || 'Opponent',
+    health: Number(state.battlegrounds.opponentHero?.health) || 0,
+    armor: Number(state.battlegrounds.opponentHero?.armor) || 0,
+  };
+  const steps = [];
+  let attackerSide = sumBattlegroundsBoardAttack(friendlyBoard) >= sumBattlegroundsBoardAttack(enemyBoard)
+    ? 'friendly'
+    : 'enemy';
+  let friendlyCursor = 0;
+  let enemyCursor = 0;
+  let safety = 0;
+
+  while (safety < 40) {
+    const attackerBoard = attackerSide === 'friendly' ? friendlyBoard : enemyBoard;
+    const defenderBoard = attackerSide === 'friendly' ? enemyBoard : friendlyBoard;
+    const attackerCursor = attackerSide === 'friendly' ? friendlyCursor : enemyCursor;
+    const attackerIndex = findBattlegroundsNextLivingIndex(attackerBoard, attackerCursor);
+    const defenderIndex = findBattlegroundsNextLivingIndex(defenderBoard, 0);
+    if (attackerIndex < 0 || defenderIndex < 0) break;
+
+    const attacker = attackerBoard[attackerIndex];
+    const defender = defenderBoard[defenderIndex];
+    const attack = Math.max(0, Number(attacker.attack) || 0);
+    const counter = Math.max(0, Number(defender.attack) || 0);
+    const attackerHealthBefore = Number(attacker.health) || 0;
+    const defenderHealthBefore = Number(defender.health) || 0;
+
+    attacker.highlighted = true;
+    defender.highlighted = true;
+
+    defender.health = Math.max(0, defenderHealthBefore - attack);
+    attacker.health = Math.max(0, attackerHealthBefore - counter);
+    attacker.damageTaken = Math.max(0, attacker.startingHealth - attacker.health);
+    defender.damageTaken = Math.max(0, defender.startingHealth - defender.health);
+    attacker.alive = attacker.health > 0;
+    defender.alive = defender.health > 0;
+
+    steps.push({
+      stepIndex: safety,
+      attackerSide,
+      attackerIndex,
+      attackerId: attacker.instanceId,
+      attackerName: attacker.name,
+      attackerAttack: attack,
+      attackerHealthBefore,
+      attackerHealthAfter: attacker.health,
+      defenderSide: attackerSide === 'friendly' ? 'enemy' : 'friendly',
+      defenderIndex,
+      defenderId: defender.instanceId,
+      defenderName: defender.name,
+      defenderAttack: counter,
+      defenderHealthBefore,
+      defenderHealthAfter: defender.health,
+      defenderDefeated: defender.health <= 0,
+      attackerDefeated: attacker.health <= 0,
+    });
+
+    if (attackerSide === 'friendly') {
+      friendlyCursor = attackerIndex + 1;
+    } else {
+      enemyCursor = attackerIndex + 1;
+    }
+    attackerSide = attackerSide === 'friendly' ? 'enemy' : 'friendly';
+    safety += 1;
+  }
+
+  const friendlyFinalBoard = friendlyBoard.filter((minion) => minion.health > 0);
+  const enemyFinalBoard = enemyBoard.filter((minion) => minion.health > 0);
+  const friendlyDamageToEnemyHero = enemyFinalBoard.length === 0 ? sumBattlegroundsBoardAttack(friendlyFinalBoard) : 0;
+  const enemyDamageToFriendlyHero = friendlyFinalBoard.length === 0 ? sumBattlegroundsBoardAttack(enemyFinalBoard) : 0;
+  const friendlyHeroDamage = applyBattlegroundsHeroDamage(friendlyHero, enemyDamageToFriendlyHero);
+  const enemyHeroDamage = applyBattlegroundsHeroDamage(enemyHero, friendlyDamageToEnemyHero);
+
+  let winnerSide = null;
+  if (friendlyHero.health <= 0 && enemyHero.health <= 0) {
+    winnerSide = null;
+  } else if (enemyHero.health <= 0 && friendlyHero.health > 0) {
+    winnerSide = 'friendly';
+  } else if (friendlyHero.health <= 0 && enemyHero.health > 0) {
+    winnerSide = 'enemy';
+  } else if (friendlyHero.health !== enemyHero.health) {
+    winnerSide = friendlyHero.health > enemyHero.health ? 'friendly' : 'enemy';
+  } else if (friendlyFinalBoard.length !== enemyFinalBoard.length) {
+    winnerSide = friendlyFinalBoard.length > enemyFinalBoard.length ? 'friendly' : 'enemy';
+  } else if (sumBattlegroundsBoardAttack(friendlyFinalBoard) !== sumBattlegroundsBoardAttack(enemyFinalBoard)) {
+    winnerSide = sumBattlegroundsBoardAttack(friendlyFinalBoard) > sumBattlegroundsBoardAttack(enemyFinalBoard)
+      ? 'friendly'
+      : 'enemy';
+  }
+
+  const resultLabel = winnerSide === 'friendly'
+    ? '你赢了这场战斗'
+    : winnerSide === 'enemy'
+      ? '你输了这场战斗'
+      : '战斗打成平局';
+  const resultText = [
+    friendlyDamageToEnemyHero > 0
+      ? `我方剩余随从对敌方英雄造成 ${friendlyDamageToEnemyHero} 点伤害。`
+      : '我方没有留出足够的斩杀伤害。',
+    enemyDamageToFriendlyHero > 0
+      ? `敌方剩余随从对我方英雄造成 ${enemyDamageToFriendlyHero} 点伤害。`
+      : '敌方没有打出额外的英雄伤害。',
+    `最终血量：我方 ${friendlyHero.health} / ${state.battlegrounds.playerHealth}，${enemyHero.name} ${enemyHero.health} / ${state.battlegrounds.opponentHero?.health ?? enemyHero.health}.`,
+  ].join(' ');
+
+  const lastStep = steps[steps.length - 1] || null;
+
+  return {
+    phase: 'combat',
+    previewIndex,
+    starterSide: steps[0]?.attackerSide || null,
+    currentStepIndex: steps.length > 0 ? steps.length - 1 : -1,
+    currentAttackerSide: lastStep?.attackerSide || null,
+    currentAttackerIndex: lastStep?.attackerIndex ?? null,
+    highlightedMinionId: lastStep?.attackerId || null,
+    currentDefenderSide: lastStep?.defenderSide || null,
+    currentDefenderIndex: lastStep?.defenderIndex ?? null,
+    highlightedTargetMinionId: lastStep?.defenderId || null,
+    resultLabel,
+    resultText,
+    friendlyHero: {
+      ...friendlyHero,
+      damageTaken: friendlyHeroDamage.healthLoss,
+    },
+    enemyHero: {
+      ...enemyHero,
+      damageTaken: enemyHeroDamage.healthLoss,
+    },
+    friendlyInitialBoard: recruitBoard.map((minion) => ({ ...minion })),
+    enemyInitialBoard: getBattlegroundsCombatSourceBoard(enemySourceBoard, 'enemy').map((minion) => ({ ...minion })),
+    friendlyFinalBoard: friendlyFinalBoard.map((minion) => ({ ...minion })),
+    enemyFinalBoard: enemyFinalBoard.map((minion) => ({ ...minion })),
+    friendlyBoard: friendlyFinalBoard.map((minion) => ({ ...minion })),
+    enemyBoard: enemyFinalBoard.map((minion) => ({ ...minion })),
+    steps,
+    winnerSide,
+  };
+}
+
+function startBattlegroundsCombat() {
+  if (state.battlegrounds.phase !== 'recruit') return;
+
+  const resolvedCombat = resolveBattlegroundsCombat();
+  state.battlegrounds.phase = 'combat';
+  state.battlegrounds.playerHealth = resolvedCombat.friendlyHero.health;
+  state.battlegrounds.playerArmor = resolvedCombat.friendlyHero.armor;
+  state.battlegrounds.opponentHero = {
+    ...state.battlegrounds.opponentHero,
+    health: resolvedCombat.enemyHero.health,
+    armor: resolvedCombat.enemyHero.armor,
+  };
+  state.battlegrounds.boardPreview = resolvedCombat.friendlyFinalBoard.map((minion) => ({ ...minion }));
+  state.battlegrounds.combatPreview = resolvedCombat;
+  state.battlegrounds.log = [
+    '已进入自动战斗阶段。',
+    resolvedCombat.resultText,
+  ];
+  renderBattlegrounds();
+}
+
+function advanceBattlegroundsPreview() {
+  const nextIndex = (state.battlegrounds.previewIndex + 1) % BATTLEGROUNDS_PREVIEW_SCENARIOS.length;
+  applyBattlegroundsPreviewScenario(nextIndex);
+  state.battlegrounds.phase = 'recruit';
+  state.battlegrounds.log = [
+    `已推进到第 ${state.battlegrounds.round} 回合的「${BATTLEGROUNDS_PREVIEW_SCENARIOS[nextIndex].label}」演示。`,
+    '这个按钮后续会替换成真实的回合流转与战斗结算。',
+  ];
+  renderBattlegrounds();
+}
+
+function renderBattlegrounds(animationPlan = null) {
+  const combatPreview = state.battlegrounds.combatPreview || null;
+  const isCombatPhase = state.battlegrounds.phase === 'combat';
+  const phaseLabel = state.battlegrounds.phase === 'hero-select'
+    ? '英雄选择'
+    : isCombatPhase
+      ? '战斗阶段'
+      : '招募 / 战斗预演';
+  renderBattlegroundsView({
+    host: elements.gameArea,
+    snapshot: {
+      ...state.battlegrounds,
+      previewLabel: BATTLEGROUNDS_PREVIEW_SCENARIOS[state.battlegrounds.previewIndex]?.label || '战棋预演',
+      phaseLabel,
+      timerLabel: `${state.battlegrounds.timerSeconds}s`,
+      combatPhase: isCombatPhase,
+      combatCurrentAttackerSide: combatPreview?.currentAttackerSide ?? null,
+      combatCurrentAttackerIndex: combatPreview?.currentAttackerIndex ?? null,
+      combatHighlightedMinionId: combatPreview?.highlightedMinionId ?? null,
+      combatHighlightedTargetMinionId: combatPreview?.highlightedTargetMinionId ?? null,
+      combatResultLabel: combatPreview?.resultLabel ?? '',
+      combatResultText: combatPreview?.resultText ?? '',
+      combatFriendlyBoard: combatPreview?.friendlyFinalBoard || state.battlegrounds.boardPreview,
+      combatEnemyBoard: combatPreview?.enemyFinalBoard || [],
+      combatSteps: combatPreview?.steps || [],
+    },
+    callbacks: {
+      onBack: () => showLobbyOverlay(),
+      onSelectHero: selectBattlegroundsHero,
+      onConfirmHero: confirmBattlegroundsHero,
+      onStartCombat: startBattlegroundsCombat,
+      onRefreshShell: refreshBattlegroundsShell,
+      onToggleFreeze: toggleBattlegroundsFreeze,
+      onBuyShopCard: buyBattlegroundsShopCard,
+      onPlayHandCard: playBattlegroundsHandCard,
+      onAdvancePreview: advanceBattlegroundsPreview,
+    },
+  });
+  runBattlegroundsAnimationPlan(animationPlan);
+
+  elements.title.textContent = '炉边酒馆 · 酒馆战棋';
+  elements.matchStatus.textContent = '战棋实验场';
+  elements.turnStatus.textContent = `第 ${state.battlegrounds.round} 回合`;
 }
 
 function updatePvpState(gameState) {
@@ -937,7 +2015,7 @@ function isMyTurn() {
 
 function pvpPlayCard(cardInstance) {
   if (!isMyTurn() || state.busy) return;
-  if (cardInstance.cost > state.pvp.player.mana) return;
+  if (getEffectiveCardCostPvp(cardInstance) > state.pvp.player.mana) return;
 
   const needsTarget = cardInstance.type === 'spell' && cardNeedsExplicitTargetPvp(cardInstance);
 
@@ -957,7 +2035,7 @@ function pvpResolveSpellTarget(targetRef) {
 
   const card = state.pvp.player.hand.find((entry) => entry.instanceId === state.pvp.pendingSpellId);
   if (!card) return;
-  if (card.cost > state.pvp.player.mana) return;
+  if (getEffectiveCardCostPvp(card) > state.pvp.player.mana) return;
 
   if (!canCardTarget(card, state.pvp.mySlot, targetRef)) return;
 
@@ -1047,8 +2125,106 @@ function dealDamage(target, amount) {
   const absorbed = Math.min(target.armor, amount);
   target.armor -= absorbed;
   const healthLoss = amount - absorbed;
+  const before = target.health;
   target.health -= healthLoss;
+  // 追踪生命值变化（用于血肉巨人等动态费用）
+  if (before !== target.health && target.runtime) {
+    target.runtime.healthChangesThisTurn = (target.runtime.healthChangesThisTurn || 0) + 1;
+  }
   return healthLoss;
+}
+
+function ensureSoloRuntime(side = 'player') {
+  const hero = state.solo[side];
+  if (!hero) return null;
+  hero.runtime ||= {
+    selfDamageThisTurn: 0,
+    selfDamageThisGame: 0,
+    damageTakenThisTurn: 0,
+    healthChangesThisTurn: 0,
+    questline: null,
+    redirectSelfDamage: false,
+    delayedDamage: [],
+    deadFriendlyMinions: [],
+  };
+  return hero.runtime;
+}
+
+function getEffectiveCardCostSolo(card) {
+  const baseCost = Math.max(0, Number(card?.cost) || 0);
+  const modifier = card?.costModifier;
+  if (!modifier) return baseCost;
+  const runtime = ensureSoloRuntime('player');
+  let progress = 0;
+  if (modifier.rule === 'missingHealth') {
+    progress = Math.max(0, (state.solo.player.maxHealth || 30) - state.solo.player.health);
+  } else if (modifier.rule === 'selfDamageThisGame') {
+    progress = runtime?.selfDamageThisGame || 0;
+  } else if (modifier.rule === 'healthChangedThisTurn') {
+    progress = runtime?.healthChangesThisTurn || 0;
+  }
+  return Math.max(Number(modifier.minimum) || 0, baseCost - progress * (Number(modifier.amountPer) || 1));
+}
+
+function addCardToSoloHand(cardId, options = {}) {
+  const source = effectiveCardById[cardId];
+  if (!source || state.solo.player.hand.length >= 10) return false;
+  state.solo.player.hand.push({
+    ...cloneValue(source),
+    instanceId: uid(`card-${source.id}`),
+    temporary: options.temporary === true,
+  });
+  return true;
+}
+
+function advanceQuestlineSolo(amount) {
+  const runtime = ensureSoloRuntime('player');
+  const quest = runtime?.questline;
+  if (!quest || quest.completed || amount <= 0) return;
+  quest.progress += amount;
+  while (!quest.completed && quest.progress >= quest.thresholds[quest.stage]) {
+    quest.progress -= quest.thresholds[quest.stage];
+    quest.stage += 1;
+    if (quest.stage < quest.thresholds.length) {
+      const damage = quest.rewardDamage || 0;
+      if (damage > 0) {
+        dealDamage(state.solo.boss, damage);
+        const before = state.solo.player.health;
+        state.solo.player.health = Math.min(state.solo.player.maxHealth, state.solo.player.health + (quest.rewardHeal || damage));
+        if (state.solo.player.health !== before) runtime.healthChangesThisTurn += 1;
+        pushSoloLog(`任务线第 ${quest.stage} 阶段完成：对敌方英雄造成 ${damage} 点伤害，并恢复等量生命。`);
+      }
+    } else {
+      quest.completed = true;
+      if (addCardToSoloHand(quest.finalRewardCardId)) {
+        pushSoloLog('任务线完成：枯萎化身塔姆辛已加入手牌。');
+      }
+    }
+  }
+}
+
+function applySelfDamageSolo(actorSide, amount) {
+  const numericAmount = Math.max(0, Number(amount) || 0);
+  if (!numericAmount) return 0;
+  const runtime = ensureSoloRuntime(actorSide);
+  if (actorSide === 'player' && runtime?.redirectSelfDamage && state.solo.phase === 'player') {
+    dealDamage(state.solo.boss, numericAmount);
+    pushSoloLog(`枯萎化身将 ${numericAmount} 点自伤转移给了 ${state.solo.boss.heroName}。`);
+    return numericAmount;
+  }
+  const hero = state.solo[actorSide];
+  dealDamage(hero, numericAmount);
+  if (runtime) {
+    runtime.damageTakenThisTurn += numericAmount;
+    // healthChangesThisTurn 已在 dealDamage() 中追踪，此处不再重复
+    if (actorSide === 'player' && state.solo.phase === 'player') {
+      runtime.selfDamageThisTurn += numericAmount;
+      runtime.selfDamageThisGame += numericAmount;
+      advanceQuestlineSolo(numericAmount);
+    }
+  }
+  pushSoloLog(`${hero.heroName} 受到 ${numericAmount} 点自伤。`);
+  return numericAmount;
 }
 
 function cleanBoard(board) {
@@ -1069,6 +2245,7 @@ function capBoard(side, incomingMinions) {
 function wakeBoard(side) {
   for (const minion of state.solo[side].board) {
     resetMinionForTurn(minion);
+    minion.rushOnly = false;
   }
 }
 
@@ -1133,6 +2310,21 @@ function resolveRebornSolo(side) {
       survivors.push(minion);
       continue;
     }
+    if (side === 'player' && !minion.deathRecorded) {
+      minion.deathRecorded = true;
+      ensureSoloRuntime('player').deadFriendlyMinions.push({ sourceId: minion.sourceId, name: minion.name });
+    }
+    if (!minion.deathrattleTriggered && (minion.effects || []).some((effect) => effect.trigger === 'deathrattle')) {
+      minion.deathrattleTriggered = true;
+      applyEffectsSolo(minion.effects, side, {
+        primaryTarget: null,
+        primaryTargets: {},
+        chosenTarget: null,
+        trigger: 'deathrattle',
+        sourceCard: minion,
+      });
+      pushSoloLog(`${minion.name} 的亡语触发。`);
+    }
     if (minion.rebornAvailable) {
       Object.assign(
         minion,
@@ -1164,6 +2356,7 @@ function getTauntMinionsSolo(side) {
 
 function canAttackTargetSolo(attacker, defenderSide, defenderType, defenderId = '') {
   if (!attacker || !attacker.canAttack) return false;
+  if (attacker.rushOnly && defenderType === 'hero') return false;
   const tauntMinions = getTauntMinionsSolo(defenderSide);
   if (!tauntMinions.length) return true;
   if (defenderType !== 'minion') return false;
@@ -1244,8 +2437,19 @@ function cardNeedsExplicitTargetSolo(card) {
 
 function isValidEffectTargetSolo(effect, actorSide, targetRef) {
   if (!targetRef) return false;
+
+  // 检查 targetKinds 约束
+  if (effect.targetKinds && Array.isArray(effect.targetKinds) && effect.targetKinds.length > 0) {
+    if (!effect.targetKinds.includes(targetRef.kind)) {
+      return false;
+    }
+  }
+
   const opponentSide = actorSide === 'player' ? 'boss' : 'player';
   if (effect.target === 'playerChoice') {
+    if (effect.type === 'adjacentChainDamage') {
+      return targetRef.kind === 'minion';
+    }
     if (['damage', 'heal'].includes(effect.type)) {
       return targetRef.kind === 'hero' || targetRef.kind === 'minion';
     }
@@ -1317,8 +2521,10 @@ function resolveEffectTargetSolo(effect, actorSide, context) {
   return null;
 }
 
-function applyEffectsSolo(effects, actorSide, context = { primaryTarget: null, primaryTargets: {}, chosenTarget: null }) {
+function applyEffectsSolo(effects, actorSide, context = { primaryTarget: null, primaryTargets: {}, chosenTarget: null, trigger: 'onPlay', sourceCard: null }) {
   for (const effect of effects || []) {
+    if (effect.trigger && effect.trigger !== (context.trigger || 'onPlay')) continue;
+
     if (effect.type === 'conditional') {
       const controlsMinion = actorSide === 'player' ? state.solo.player.board.length > 0 : state.solo.boss.board.length > 0;
       const controlsNoMinion = !controlsMinion;
@@ -1328,6 +2534,183 @@ function applyEffectsSolo(effects, actorSide, context = { primaryTarget: null, p
       if (effect.condition === 'controlsNoMinion' && controlsNoMinion) {
         applyEffectsSolo(effect.effects, actorSide, context);
       }
+      continue;
+    }
+
+    if (effect.type === 'questline' && actorSide === 'player') {
+      const runtime = ensureSoloRuntime('player');
+      runtime.questline = {
+        thresholds: Array.isArray(effect.thresholds) && effect.thresholds.length ? effect.thresholds.map(Number) : [12, 12, 12],
+        stage: 0,
+        progress: 0,
+        rewardDamage: Number(effect.rewardDamage) || 0,
+        rewardHeal: Number(effect.rewardHeal) || 0,
+        finalRewardCardId: effect.finalRewardCardId || 'hs-67547',
+        completed: false,
+      };
+      pushSoloLog('任务线“恶魔之种”已开启。');
+      continue;
+    }
+
+    if (effect.type === 'selfDamage') {
+      applySelfDamageSolo(actorSide, effect.amount);
+      continue;
+    }
+
+    if (effect.type === 'redirectSelfDamage' && actorSide === 'player') {
+      ensureSoloRuntime('player').redirectSelfDamage = true;
+      pushSoloLog('枯萎化身生效：你的回合中的自伤会转移给对手。');
+      continue;
+    }
+
+    if (effect.type === 'delayedSelfDamage' && actorSide === 'player') {
+      ensureSoloRuntime('player').delayedDamage.push({
+        amount: Number(effect.amount) || 0,
+        turnsRemaining: Number(effect.turns) || 0,
+      });
+      continue;
+    }
+
+    if (effect.type === 'shuffleCopies' && actorSide === 'player' && context.sourceCard) {
+      const amount = Math.max(0, Number(effect.amount) || 0);
+      for (let index = 0; index < amount; index += 1) {
+        state.solo.player.deck.push({
+          ...cloneValue(context.sourceCard),
+          instanceId: uid(`card-${context.sourceCard.id || context.sourceCard.sourceId}`),
+          temporary: false,
+        });
+      }
+      state.solo.player.deck = shuffle(state.solo.player.deck);
+      pushSoloLog(`将 ${amount} 张${context.sourceCard.name}洗入牌库。`);
+      continue;
+    }
+
+    if (effect.type === 'restoreDamageThisTurn' && actorSide === 'player') {
+      const runtime = ensureSoloRuntime('player');
+      const before = state.solo.player.health;
+      state.solo.player.health = Math.min(state.solo.player.maxHealth, state.solo.player.health + runtime.damageTakenThisTurn);
+      const restored = state.solo.player.health - before;
+      if (restored > 0) runtime.healthChangesThisTurn += 1;
+      pushSoloLog(`治疗石恢复了 ${restored} 点生命值。`);
+      continue;
+    }
+
+    if (effect.type === 'discoverFromDeck' && actorSide === 'player') {
+      const sourceIndex = state.solo.player.deck.findIndex((card) => !effect.excludeSelf || card.id !== context.sourceCard?.id);
+      if (sourceIndex >= 0 && state.solo.player.hand.length < 10) {
+        const [discovered] = state.solo.player.deck.splice(sourceIndex, 1);
+        state.solo.player.hand.push({ ...discovered, temporary: effect.temporary === true });
+        pushSoloLog(`你从牌库中发现了 ${discovered.name}${effect.temporary ? '（临时）' : ''}。`);
+      }
+      continue;
+    }
+
+    if (effect.type === 'returnDeadFriendlyMinions' && actorSide === 'player') {
+      const runtime = ensureSoloRuntime('player');
+      const amount = Math.max(0, Number(effect.amount) || 0);
+      const returned = runtime.deadFriendlyMinions.splice(Math.max(0, runtime.deadFriendlyMinions.length - amount));
+      let added = 0;
+      for (const dead of returned) {
+        if (addCardToSoloHand(dead.sourceId)) added += 1;
+      }
+      pushSoloLog(`亡者复生将 ${added} 个友方随从移回手牌。`);
+      continue;
+    }
+
+    if (effect.type === 'grantKeyword' && effect.target === 'otherFriendlyMinions') {
+      const board = state.solo[actorSide].board;
+      for (const minion of board) {
+        if (context.sourceCard && minion.sourceId === context.sourceCard.id) continue;
+        const hadRush = hasKeyword(minion, 'rush');
+        minion.keywords = normalizeKeywords([...(minion.keywords || []), effect.keyword]);
+        if (effect.keyword === 'rush' && !hadRush) {
+          const wasSleeping = minion.sleeping;
+          minion.sleeping = false;
+          minion.canAttack = true;
+          // 只有本回合刚召唤的随从（原本在沉睡）才限制不能打英雄
+          if (wasSleeping) {
+            minion.rushOnly = true;
+          }
+        }
+      }
+      continue;
+    }
+
+    if (effect.type === 'swapHandWithDeckBottom' && actorSide === 'player') {
+      const oldHand = [...state.solo.player.hand];
+      const count = oldHand.length;
+      const replacement = state.solo.player.deck.splice(Math.max(0, state.solo.player.deck.length - count));
+      state.solo.player.hand = replacement;
+      state.solo.player.deck.push(...oldHand.map((card) => ({ ...card, temporary: false })));
+      pushSoloLog(`芬利将 ${oldHand.length} 张手牌与牌库底交换。`);
+      continue;
+    }
+
+    if (effect.type === 'destroyFriendlyAndRandomEnemies') {
+      const friendly = state.solo[actorSide];
+      const enemySide = actorSide === 'player' ? 'boss' : 'player';
+      const destroyed = friendly.board.length;
+      friendly.board.forEach((minion) => { minion.health = 0; });
+      state.solo[enemySide].board.slice(0, destroyed).forEach((minion) => { minion.health = 0; });
+      processSoloDeaths(actorSide, enemySide);
+      pushSoloLog(`火焰之灾祸消灭了 ${destroyed} 个友方随从，并尝试消灭等量敌方随从。`);
+      continue;
+    }
+
+    if (effect.type === 'repeatAoeWhileMinionDies') {
+      const amount = Math.max(1, Number(effect.amount) || 1);
+      for (let wave = 0; wave < 20; wave += 1) {
+        const before = state.solo.player.board.length + state.solo.boss.board.length;
+        state.solo.player.board.forEach((minion) => dealMinionDamageSolo(null, actorSide, minion, amount));
+        state.solo.boss.board.forEach((minion) => dealMinionDamageSolo(null, actorSide, minion, amount));
+        processSoloDeaths('player', 'boss');
+        const after = state.solo.player.board.length + state.solo.boss.board.length;
+        if (after >= before) break;
+      }
+      pushSoloLog('亵渎完成了连续伤害结算。');
+      continue;
+    }
+
+    if (effect.type === 'adjacentChainDamage') {
+      const targetRef = context.chosenTarget;
+      if (!targetRef || targetRef.kind !== 'minion') continue;
+      const board = state.solo[targetRef.side].board;
+      const startIndex = board.findIndex((minion) => minion.instanceId === targetRef.id);
+      if (startIndex < 0) continue;
+      let amount = Math.max(1, Number(effect.amount) || 1);
+      for (let index = startIndex; index < board.length; index += 1) {
+        dealMinionDamageSolo(null, actorSide, board[index], amount);
+        amount += Number(effect.step) || 1;
+      }
+      processSoloDeaths(targetRef.side);
+      pushSoloLog('多米诺效应向目标右侧完成了递增伤害结算。');
+      continue;
+    }
+
+    if (effect.type === 'destroy') {
+      const targetRef = resolveEffectTargetSolo(effect, actorSide, context);
+      const targetEntity = getTargetEntitySolo(targetRef);
+      if (!targetRef || targetRef.kind !== 'minion' || !targetEntity) continue;
+      targetEntity.health = 0;
+      pushSoloLog(`${describeTargetRefSolo(targetRef)} 被消灭。`);
+      processSoloDeaths(targetRef.side);
+      continue;
+    }
+
+    if (effect.type === 'restoreMana') {
+      const hero = state.solo[actorSide];
+      const runtime = ensureSoloRuntime(actorSide);
+      if (effect.condition === 'heroDamagedThisTurn' && (runtime?.damageTakenThisTurn || 0) <= 0) continue;
+      const before = hero.mana;
+      hero.mana = Math.min(hero.maxMana, hero.mana + (Number(effect.amount) || 0));
+      pushSoloLog(`${hero.heroName} 复原了 ${hero.mana - before} 个法力水晶。`);
+      continue;
+    }
+
+    if (effect.type === 'setNextHeroPowerCost') {
+      const runtime = ensureSoloRuntime(actorSide);
+      runtime.nextHeroPowerCost = Math.max(0, Number(effect.amount) || 0);
+      pushSoloLog(`${state.solo[actorSide].heroName} 的下一个英雄技能费用变为 ${runtime.nextHeroPowerCost}。`);
       continue;
     }
 
@@ -1363,6 +2746,9 @@ function applyEffectsSolo(effects, actorSide, context = { primaryTarget: null, p
       context.primaryTarget = context.primaryTarget || targetRef;
       context.primaryTargets.heal = context.primaryTargets.heal || targetRef;
       const healed = restoreHealth(targetEntity, Number(effect.amount) || 0);
+      if (targetRef.side === 'player' && healed > 0) {
+        ensureSoloRuntime('player').healthChangesThisTurn += 1;
+      }
       pushSoloLog(`${describeTargetRefSolo(targetRef)} 恢复了 ${healed} 点生命值。`);
       animator?.heal?.(getTargetAreaSolo(targetRef));
       if (targetRef.kind === 'hero') {
@@ -1408,7 +2794,11 @@ function applyEffectsSolo(effects, actorSide, context = { primaryTarget: null, p
       context.primaryTarget = context.primaryTarget || targetRef;
       context.primaryTargets.draw = context.primaryTargets.draw || targetRef;
       if (targetRef.side === 'player' && actorSide === 'player') {
+        const handCountBefore = state.solo.player.hand.length;
         const drawn = drawCardsSolo(Number(effect.amount) || 0);
+        if (effect.temporary && drawn > 0) {
+          state.solo.player.hand.slice(handCountBefore).forEach((card) => { card.temporary = true; });
+        }
         pushSoloLog(`你抽了 ${drawn} 张牌。`);
         animator?.drawCard?.(elements.handCards);
       }
@@ -1449,7 +2839,8 @@ function drawCardsSolo(amount) {
 }
 
 function resolveCardSolo(cardInstance, chosenDamageTarget = null) {
-  state.solo.player.mana -= cardInstance.cost;
+  const effectiveCost = getEffectiveCardCostSolo(cardInstance);
+  state.solo.player.mana -= effectiveCost;
   state.solo.player.hand = state.solo.player.hand.filter((card) => card.instanceId !== cardInstance.instanceId);
   clearPendingSpellSolo();
   animator?.pulseStat?.(elements.playerMana);
@@ -1457,8 +2848,20 @@ function resolveCardSolo(cardInstance, chosenDamageTarget = null) {
   if (cardInstance.type === 'minion') {
     const landed = capBoard('player', [cloneMinion(cardInstance, 'player')]);
     if (landed.length) {
+      if (hasKeyword(landed[0], 'rush')) {
+        landed[0].sleeping = false;
+        landed[0].canAttack = true;
+        landed[0].rushOnly = true;
+      }
       state.solo.player.board.push(...landed);
       pushSoloLog(`你打出了 ${cardInstance.name}。`);
+      applyEffectsSolo(cardInstance.effects, 'player', {
+        primaryTarget: null,
+        primaryTargets: {},
+        chosenTarget: chosenDamageTarget,
+        trigger: 'battlecry',
+        sourceCard: cardInstance,
+      });
     } else {
       pushSoloLog(`你的战场已满，${cardInstance.name} 无法登场。`);
     }
@@ -1468,6 +2871,8 @@ function resolveCardSolo(cardInstance, chosenDamageTarget = null) {
       primaryTarget: null,
       primaryTargets: {},
       chosenTarget: chosenDamageTarget,
+      trigger: 'onPlay',
+      sourceCard: cardInstance,
     });
   }
 
@@ -1482,12 +2887,14 @@ function resolveCardSolo(cardInstance, chosenDamageTarget = null) {
 
 function playCardSolo(cardInstance) {
   if (state.solo.phase !== 'player' || state.solo.busy) return;
-  if (cardInstance.cost > state.solo.player.mana) return;
+  if (getEffectiveCardCostSolo(cardInstance) > state.solo.player.mana) return;
   if (cardInstance.type === 'minion' && state.solo.player.board.length >= getSoloScenario().player.maxBoardSize) return;
 
-  if (cardInstance.type === 'spell' && cardNeedsExplicitTargetSolo(cardInstance)) {
+  // 法术和带目标战吼/亡语的随从都需要进入选目标状态
+  if (cardNeedsExplicitTargetSolo(cardInstance)) {
     state.solo.pendingSpellId = state.solo.pendingSpellId === cardInstance.instanceId ? '' : cardInstance.instanceId;
     state.solo.selectedAttackerId = '';
+    state.solo.pendingCardId = cardInstance.instanceId;
     renderSolo();
     return;
   }
@@ -1502,7 +2909,7 @@ function resolvePendingSpellTargetSolo(targetRef) {
     renderSolo();
     return;
   }
-  if (card.cost > state.solo.player.mana) {
+  if (getEffectiveCardCostSolo(card) > state.solo.player.mana) {
     clearPendingSpellSolo();
     renderSolo();
     return;
@@ -1640,6 +3047,11 @@ async function sleepSolo(ms) {
 
 async function resolveEnemyTurnSolo() {
   const turnLimit = getSoloTurnLimit();
+  const temporaryCount = state.solo.player.hand.filter((card) => card.temporary).length;
+  if (temporaryCount > 0) {
+    state.solo.player.hand = state.solo.player.hand.filter((card) => !card.temporary);
+    pushSoloLog(`回合结束，弃掉了 ${temporaryCount} 张临时牌。`);
+  }
   state.solo.busy = true;
   state.solo.phase = 'enemy';
   state.solo.selectedAttackerId = '';
@@ -1678,12 +3090,23 @@ async function resolveEnemyTurnSolo() {
   state.solo.boss.maxMana = Math.min(10, state.solo.turn);
   state.solo.boss.mana = state.solo.boss.maxMana;
   wakeBoard('player');
+  state.solo.phase = 'player';
+  const runtime = ensureSoloRuntime('player');
+  runtime.selfDamageThisTurn = 0;
+  runtime.damageTakenThisTurn = 0;
+  runtime.healthChangesThisTurn = 0;
+  for (const delayed of runtime.delayedDamage) {
+    if (delayed.turnsRemaining <= 0) continue;
+    applySelfDamageSolo('player', delayed.amount);
+    delayed.turnsRemaining -= 1;
+  }
+  runtime.delayedDamage = runtime.delayedDamage.filter((entry) => entry.turnsRemaining > 0);
+  if (checkSoloOutcome()) return;
   const drawn = drawCards(1);
   if (drawn) {
     pushSoloLog(`回合开始，你抽了 ${drawn} 张牌。`);
     animator?.drawCard?.(elements.handCards);
   }
-  state.solo.phase = 'player';
   state.solo.busy = false;
   renderSolo();
   animator?.turnBanner?.(`你的回合 ${state.solo.turn}`, { durationMs: 760 });
@@ -1731,7 +3154,7 @@ function isSoloGameOver() {
 
 function playerCanPlaySolo(card) {
   if (state.solo.phase !== 'player' || state.solo.busy || isSoloGameOver()) return false;
-  if (card.cost > state.solo.player.mana) return false;
+  if (getEffectiveCardCostSolo(card) > state.solo.player.mana) return false;
   if (card.type === 'minion' && state.solo.player.board.length >= getSoloScenario().player.maxBoardSize) return false;
   return true;
 }
@@ -1739,6 +3162,19 @@ function playerCanPlaySolo(card) {
 // ============================================
 // PvP 辅助函数（复用Solo的逻辑）
 // ============================================
+
+function getEffectiveCardCostPvp(card) {
+  const baseCost = Math.max(0, Number(card?.cost) || 0);
+  const modifier = card?.costModifier;
+  if (!modifier) return baseCost;
+  const player = state.pvp.player || {};
+  const runtime = player.runtime || {};
+  let progress = 0;
+  if (modifier.rule === 'missingHealth') progress = Math.max(0, 30 - (player.health || 0));
+  if (modifier.rule === 'selfDamageThisGame') progress = runtime.selfDamageThisGame || 0;
+  if (modifier.rule === 'healthChangedThisTurn') progress = runtime.healthChangesThisTurn || 0;
+  return Math.max(Number(modifier.minimum) || 0, baseCost - progress * (Number(modifier.amountPer) || 1));
+}
 
 function effectNeedsExplicitTargetPvP(effect) {
   if (effect.type === 'conditional') {
@@ -1921,14 +3357,21 @@ function renderHeroPanelsSolo() {
   elements.enemyMana.textContent = `${state.solo.boss.mana} / ${state.solo.boss.maxMana}`;
 
   elements.playerHeroName.textContent = state.solo.player.heroName;
-  elements.playerHeroNote.textContent = `牌库 ${state.solo.player.deck.length} 张 · 手牌 ${state.solo.player.hand.length} 张`;
+  const runtime = ensureSoloRuntime('player');
+  const quest = runtime.questline;
+  const questLabel = quest
+    ? quest.completed
+      ? ' · 任务线已完成'
+      : ` · 任务线 ${quest.stage + 1}/${quest.thresholds.length}：${quest.progress}/${quest.thresholds[quest.stage]}`
+    : '';
+  elements.playerHeroNote.textContent = `牌库 ${state.solo.player.deck.length} 张 · 手牌 ${state.solo.player.hand.length} 张 · 本局自伤 ${runtime.selfDamageThisGame}${questLabel}`;
   elements.playerHealth.textContent = Math.max(0, state.solo.player.health);
   elements.playerArmor.textContent = Math.max(0, state.solo.player.armor);
   elements.playerMana.textContent = `${state.solo.player.mana} / ${state.solo.player.maxMana}`;
 
-  elements.enemyHeroArea.classList.toggle('is-targetable', enemyHeroCanBeAttacked || (pendingSpell && canCardTargetSolo(pendingSpell, 'player', createHeroTargetRef('boss'))));
+  elements.enemyHeroArea.classList.toggle('is-targetable', enemyHeroCanBeAttacked);
   elements.enemyHeroArea.classList.toggle('is-spell-targetable', pendingSpell && canCardTargetSolo(pendingSpell, 'player', createHeroTargetRef('boss')));
-  elements.playerHeroArea.classList.toggle('is-targetable', pendingSpell && canCardTargetSolo(pendingSpell, 'player', createHeroTargetRef('player')));
+  elements.playerHeroArea.classList.toggle('is-targetable', false);
   elements.playerHeroArea.classList.toggle('is-spell-targetable', pendingSpell && canCardTargetSolo(pendingSpell, 'player', createHeroTargetRef('player')));
 }
 
@@ -1944,7 +3387,7 @@ function renderBoardSolo() {
       const spellTargetable = pendingSpell ? canCardTargetSolo(pendingSpell, 'player', targetRef) : false;
       const canAttack = minion.canAttack && state.solo.phase === 'player' && !state.solo.busy;
       const selected = state.solo.selectedAttackerId === minion.instanceId;
-      return createMinionMarkupSolo(minion, 'player', canAttack, selected, spellTargetable);
+      return createMinionMarkupSolo(minion, 'player', canAttack, selected, spellTargetable, false);
     }).join('')}
   `;
 
@@ -1954,23 +3397,24 @@ function renderBoardSolo() {
       const targetRef = createMinionTargetRef('boss', minion.instanceId);
       const spellTargetable = pendingSpell ? canCardTargetSolo(pendingSpell, 'player', targetRef) : false;
       const attackTargetable = Boolean(attacker && canAttackTargetSolo(attacker, 'boss', 'minion', minion.instanceId));
-      return createMinionMarkupSolo(minion, 'boss', pendingSpell ? spellTargetable : attackTargetable, false, spellTargetable);
+      return createMinionMarkupSolo(minion, 'boss', false, false, spellTargetable, attackTargetable);
     }).join('')}
   `;
 }
 
-function createMinionMarkupSolo(minion, ownerSide, canAttack, selected, spellTargetable) {
+function createMinionMarkupSolo(minion, ownerSide, canAttack, selected, spellTargetable, attackTargetable = false) {
   const textValue = minion.text || buildKeywordText(minion.keywords);
   const text = textValue ? `<span class="board-minion__text">${textValue}</span>` : '';
   const isEnemy = ownerSide === 'boss';
   const keywords = keywordBadgesMarkup(minion);
+  const interactive = canAttack || spellTargetable || attackTargetable;
 
   return `
     <button
       type="button"
-      class="board-minion ${isEnemy ? 'board-minion--enemy' : ''} ${canAttack ? 'is-ready' : ''} ${selected ? 'is-selected' : ''} ${spellTargetable ? 'is-spell-targetable' : ''}"
+      class="board-minion ${isEnemy ? 'board-minion--enemy' : ''} ${canAttack ? 'is-ready' : ''} ${attackTargetable ? 'is-targetable' : ''} ${selected ? 'is-selected' : ''} ${spellTargetable ? 'is-spell-targetable' : ''}"
       data-minion-id="${minion.instanceId}"
-      ${canAttack || spellTargetable ? '' : 'disabled'}
+      ${interactive ? '' : 'disabled'}
     >
       <span class="board-minion__name">${minion.name}</span>
       ${keywords}
@@ -1986,6 +3430,7 @@ function createMinionMarkupSolo(minion, ownerSide, canAttack, selected, spellTar
 function renderHandSolo() {
   elements.handCards.innerHTML = state.solo.player.hand.map((card) => {
     const playable = playerCanPlaySolo(card);
+    const effectiveCost = getEffectiveCardCostSolo(card);
     const pending = state.solo.pendingSpellId === card.instanceId;
     const textValue = resolveCardText(card);
     const effectText = textValue ? `<span class="game-card__text">${textValue}</span>` : '';
@@ -2008,7 +3453,7 @@ function renderHandSolo() {
         data-card-id="${card.instanceId}"
         ${playable ? '' : 'disabled'}
       >
-        <span class="game-card__cost">${card.cost}</span>
+        <span class="game-card__cost">${effectiveCost}</span>
         <span class="game-card__name">${card.name}</span>
         <span class="game-card__type">${card.type === 'minion' ? '随从' : '法术'}</span>
         ${effectText}
@@ -2093,9 +3538,9 @@ function renderHeroPanelsPvP() {
   const canTargetEnemyHeroWithSpell = Boolean(pendingSpell && canCardTarget(pendingSpell, state.pvp.mySlot, enemyHeroTarget));
   const canTargetFriendlyHeroWithSpell = Boolean(pendingSpell && canCardTarget(pendingSpell, state.pvp.mySlot, friendlyHeroTarget));
 
-  elements.enemyHeroArea.classList.toggle('is-targetable', enemyHeroCanBeAttacked || canTargetEnemyHeroWithSpell);
+  elements.enemyHeroArea.classList.toggle('is-targetable', enemyHeroCanBeAttacked);
   elements.enemyHeroArea.classList.toggle('is-spell-targetable', canTargetEnemyHeroWithSpell);
-  elements.playerHeroArea.classList.toggle('is-targetable', canTargetFriendlyHeroWithSpell);
+  elements.playerHeroArea.classList.toggle('is-targetable', false);
   elements.playerHeroArea.classList.toggle('is-spell-targetable', canTargetFriendlyHeroWithSpell);
 
   // PvP状态
@@ -2157,7 +3602,7 @@ function renderBoardPvP() {
       return `
         <button
           type="button"
-          class="board-minion board-minion--enemy ${spellTargetable ? 'is-spell-targetable' : ''}"
+          class="board-minion board-minion--enemy ${attackTargetable ? 'is-targetable' : ''} ${spellTargetable ? 'is-spell-targetable' : ''}"
           data-minion-id="${minion.instanceId}"
           ${targetable ? '' : 'disabled'}
         >
@@ -2178,7 +3623,8 @@ function renderHandPvP() {
   const isMyTurn = isMyTurn();
 
   elements.handCards.innerHTML = state.pvp.player.hand.map((card) => {
-    const playable = isMyTurn && card.cost <= state.pvp.player.mana;
+    const effectiveCost = getEffectiveCardCostPvp(card);
+    const playable = isMyTurn && effectiveCost <= state.pvp.player.mana;
     const pending = state.pvp.pendingSpellId === card.instanceId;
     const textValue = resolveCardText(card);
     const effectText = textValue ? `<span class="game-card__text">${textValue}</span>` : '';
@@ -2201,7 +3647,7 @@ function renderHandPvP() {
         data-card-id="${card.instanceId}"
         ${playable ? '' : 'disabled'}
       >
-        <span class="game-card__cost">${card.cost}</span>
+        <span class="game-card__cost">${effectiveCost}</span>
         <span class="game-card__name">${card.name}</span>
         <span class="game-card__type">${card.type === 'minion' ? '随从' : '法术'}</span>
         ${effectText}
@@ -2399,6 +3845,10 @@ function render() {
     elements.lanAddressValue.textContent = preferredUrl;
   }
 
+  if (state.mode !== 'battlegrounds') {
+    hideBattlegroundsView(elements.gameArea);
+  }
+
   if (state.mode === 'solo') {
     renderSolo();
     return;
@@ -2406,6 +3856,11 @@ function render() {
 
   if (state.mode === 'pvp') {
     renderPvp();
+    return;
+  }
+
+  if (state.mode === 'battlegrounds') {
+    renderBattlegrounds();
     return;
   }
 

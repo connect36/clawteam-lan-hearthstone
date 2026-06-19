@@ -8,9 +8,14 @@ A browser-based Hearthstone-inspired mini game with:
 - a built-in card editor
 - a separate `/agents` collaboration log page
 
+The current default deck is a 30-card Wild Warlock questline/self-damage deck. See:
+
+- [CHANGELOG.md](./CHANGELOG.md)
+- [PROJECT_STATUS.md](./PROJECT_STATUS.md)
+
 Project root:
 
-- `/Users/ruiliu/Documents/New project/clawteam-lan-hearthstone`
+- `/Users/ruiliu/Documents/炉石传说卡组体验`
 
 GitHub repository:
 
@@ -90,14 +95,14 @@ The editor can currently modify:
 ## Run
 
 ```bash
-cd "/Users/ruiliu/Documents/New project/clawteam-lan-hearthstone"
+cd "/Users/ruiliu/Documents/炉石传说卡组体验"
 npm install
 npm start
 ```
 
 Default port:
 
-- `3000`
+- `3301`
 
 Custom port example:
 
@@ -113,6 +118,8 @@ The server listens on `0.0.0.0`, so devices on the same LAN can connect directly
   Main game page
 - `/editor`
   Card editor
+- `/editor/library`
+  Recorded card library and archived deck collections
 - `/agents`
   Manager / agents work log page
 - `/api/meta`
@@ -124,6 +131,7 @@ Useful examples:
 
 - [http://127.0.0.1:3301/](http://127.0.0.1:3301/)
 - [http://127.0.0.1:3301/editor](http://127.0.0.1:3301/editor)
+- [http://127.0.0.1:3301/editor/library](http://127.0.0.1:3301/editor/library)
 - [http://127.0.0.1:3301/agents](http://127.0.0.1:3301/agents)
 
 ## URL Conventions

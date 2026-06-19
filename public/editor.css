@@ -187,6 +187,13 @@ h1 {
   gap: 8px;
 }
 
+.deck-code-note {
+  margin: 0 0 12px;
+  color: #d8b56a;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
 .card-list-item {
   display: grid;
   gap: 6px;
@@ -360,6 +367,236 @@ h1 {
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* === 新版表单组件 === */
+
+.form-fieldset {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+
+.form-fieldset legend {
+  color: var(--accent);
+  font-size: 0.86rem;
+  font-weight: 700;
+  padding: 0 8px;
+}
+
+.form-fieldset.is-disabled {
+  opacity: 0.42;
+  pointer-events: none;
+}
+
+/* 派生机制徽章 */
+.derived-mechanics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.mechanic-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(127, 208, 255, 0.12);
+  border: 1px solid rgba(127, 208, 255, 0.22);
+  color: var(--accent);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.mechanic-badge.is-passive {
+  background: rgba(239, 210, 143, 0.1);
+  border-color: rgba(239, 210, 143, 0.22);
+  color: var(--gold);
+}
+
+/* 效果组 */
+.effect-group {
+  grid-column: 1 / -1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  margin-top: 2px;
+  overflow: hidden;
+}
+
+.effect-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.effect-group-header select {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.effect-group-header .group-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.effect-group-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 14px 16px;
+}
+
+.effect-group-body label {
+  display: grid;
+  gap: 6px;
+}
+
+.effect-group-body label span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.effect-group-body label.form-span {
+  grid-column: 1 / -1;
+}
+
+.effect-group-body input,
+.effect-group-body select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text);
+}
+
+.remove-group-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 100, 100, 0.2);
+  background: rgba(255, 100, 100, 0.08);
+  color: #ff8a8a;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.effect-groups-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+/* 任务线阶段 */
+.quest-stage {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.quest-stage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.quest-stage-header .group-label {
+  color: var(--gold);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.quest-stage-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  padding: 12px 14px;
+}
+
+.quest-stage-body label {
+  display: grid;
+  gap: 6px;
+}
+
+.quest-stage-body label span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.quest-stage-body input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--text);
+}
+
+.remove-stage-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 100, 100, 0.2);
+  background: rgba(255, 100, 100, 0.08);
+  color: #ff8a8a;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+/* Toast 通知 */
+.editor-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: #2d1f1f;
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  color: #ff8a8a;
+  font-size: 0.9rem;
+  z-index: 999;
+  animation: toast-in 0.24s ease-out, toast-out 0.24s 2.6s ease-in forwards;
+}
+
+.editor-toast.is-success {
+  background: #1f2d1f;
+  border-color: rgba(167, 222, 138, 0.3);
+  color: var(--green);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @media (max-width: 980px) {

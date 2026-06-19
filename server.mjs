@@ -22,7 +22,7 @@ import { cardById } from './public/game-data.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
 const host = process.env.HOST || '0.0.0.0';
-const port = Number.parseInt(process.env.PORT || '3000', 10);
+const port = Number.parseInt(process.env.PORT || '3301', 10);
 const RECONNECT_GRACE_MS = 5 * 60 * 1000;
 
 // 文件类型映射
@@ -49,6 +49,24 @@ const serverCards = Object.fromEntries(
     }
   ])
 );
+
+// 卡牌覆盖存储（从编辑器同步过来）
+const cardOverrides = new Map();
+
+function rebuildServerCards() {
+  // 从基础卡表开始
+  for (const [id, card] of Object.entries(cardById)) {
+    serverCards[id] = { ...card, enabled: card.enabled !== false };
+  }
+  // 应用覆盖
+  for (const [id, override] of cardOverrides) {
+    if (serverCards[id]) {
+      Object.assign(serverCards[id], override);
+    } else {
+      serverCards[id] = { ...override, enabled: override.enabled !== false };
+    }
+  }
+}
 
 // 注入卡牌查找表到游戏引擎
 gameEngine.getCardsLookup = () => serverCards;
@@ -85,6 +103,7 @@ async function serveStatic(req, res) {
   if (requestPath === '/') safePath = '/index.html';
   if (requestPath === '/agents' || requestPath === '/agents/') safePath = '/agents.html';
   if (requestPath === '/editor' || requestPath === '/editor/') safePath = '/editor.html';
+  if (requestPath === '/editor/library' || requestPath === '/editor/library/') safePath = '/editor-library.html';
 
   const filePath = path.join(publicDir, safePath);
 
@@ -311,9 +330,36 @@ function handleClientMessage(ws, playerId, message) {
       handleAction(ws, playerId, payload);
       break;
 
+    case ClientMessageTypes.UPDATE_CARD_OVERRIDES:
+      handleUpdateCardOverrides(ws, playerId, payload);
+      break;
+
     default:
       ws.send(JSON.stringify(createErrorMessage(`Unknown message type: ${type}`)));
   }
+}
+
+// 更新卡牌覆盖
+function handleUpdateCardOverrides(ws, playerId, payload) {
+  const { overrides } = payload;
+  if (!overrides || !Array.isArray(overrides)) {
+    ws.send(JSON.stringify(createErrorMessage('Invalid card overrides')));
+    return;
+  }
+
+  cardOverrides.clear();
+  for (const card of overrides) {
+    if (card && card.id) {
+      cardOverrides.set(card.id, card);
+    }
+  }
+  rebuildServerCards();
+
+  ws.send(JSON.stringify({
+    type: ServerMessageTypes.SESSION,
+    playerId,
+  }));
+  console.log(`Card overrides updated by ${playerId}: ${cardOverrides.size} cards`);
 }
 
 // 创建房间
