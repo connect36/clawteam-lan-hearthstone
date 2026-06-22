@@ -6,6 +6,7 @@ import {
   createCardInstance, checkAndApplyCorruption,
 } from '../public/mechanic-runtime.js';
 import { checkFrenzy, checkSpellburst, checkHonorableKill, checkOverheal, checkForged } from '../public/mechanic-conditions.js';
+import { performDredge } from '../public/mechanic-runtime.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -608,34 +609,75 @@ test('探底：不在 activeMechanics 中', () => {
   assert(r.playable === true);
 });
 
-test('探底：deck.slice(-3) 取底部3张', () => {
-  const deck = ['a','b','c','d','e','f','g','h'];
-  const bottom = deck.slice(-3);
-  assert(bottom.length === 3);
-  assert(bottom[0] === 'f');
-  assert(bottom[2] === 'h');
+test('探底：performDredge 将选中卡移到牌库顶', () => {
+  // 牌库顶A，底部C/D/E，选择C
+  const deck = [
+    { name:'A', cost:1 },  // top (index 0)
+    { name:'B', cost:2 },
+    { name:'C', cost:3 },  // bottom-3 之一
+    { name:'D', cost:4 },  // bottom-3 之一
+    { name:'E', cost:5 },  // bottom-2 之一
+  ];
+  // 底部3张: [C, D, E] at indices [2, 3, 4]
+  // 选择 C (index 2)
+  const result = performDredge(deck, 2);
+  assert(result !== null, 'performDredge should return result');
+  assert(result.selected.name === 'C', 'selected should be C');
+  // 验证最终draw顺序：C在index 0，下次shift()抽出C
+  assert(deck[0].name === 'C', 'C should be at deck top (index 0)');
+  assert(deck[1].name === 'A', '原牌库顶A应在第二位');
+  assert(deck[2].name === 'B', 'B应在第三位');
+  // 未选中的 D/E 保持相对顺序，在底部
+  const bottom2 = deck.slice(-2);
+  assert(bottom2[0].name === 'D', 'D应在底部第一张');
+  assert(bottom2[1].name === 'E', 'E应在底部第二张');
+  assert(deck.length === 5, 'deck length unchanged');
 });
 
-test('探底：splice + unshift 移动卡牌到顶部', () => {
-  const deck = ['a','b','c','d','e'];
-  const bottom = deck.slice(-3); // ['c','d','e']
-  const originalIndex = deck.indexOf('d'); // 3
-  const [selected] = deck.splice(originalIndex, 1);
-  assert(deck.length === 4, 'deck should have 4 cards after splice');
-  deck.unshift(selected);
-  assert(deck.length === 5, 'deck restored to 5 cards');
-  assert(deck[0] === 'd', 'selected card should be at top (index 0)');
-  // 未选中的保持相对顺序
-  const remainingBottom = deck.slice(-2); // 原本 c 和 e 应该还在底部
-  assert(remainingBottom.includes('c'));
-  assert(remainingBottom.includes('e'));
+test('探底：performDredge 选择最后一张', () => {
+  const deck = [
+    { name:'A', cost:1 },
+    { name:'B', cost:2 },
+    { name:'C', cost:3 },
+  ];
+  // 底部3张就是全部3张: [A, B, C]
+  // 选择 C (最后一张, index 2)
+  const result = performDredge(deck, 2);
+  assert(result.selected.name === 'C');
+  assert(deck[0].name === 'C', 'C at top');
+  assert(deck[1].name === 'A', 'A next');
+  assert(deck[2].name === 'B', 'B last');
 });
 
-test('探底：牌库仅1张时不报错', () => {
-  const deck = ['a'];
-  const bottom = deck.slice(-Math.min(3, deck.length));
-  assert(bottom.length === 1);
-  assert(bottom[0] === 'a');
+test('探底：performDredge 选择第一张（底部第一张）', () => {
+  const deck = [
+    { name:'A', cost:1 },
+    { name:'B', cost:2 },
+    { name:'C', cost:3 },
+    { name:'D', cost:4 },
+  ];
+  // 底部3张: [B, C, D] at indices [1, 2, 3]
+  // 选择 B (底部第一张, index 1)
+  const result = performDredge(deck, 1);
+  assert(result.selected.name === 'B');
+  assert(deck[0].name === 'B', 'B at top');
+  assert(deck.length === 4);
+});
+
+test('探底：performDredge 单张牌库', () => {
+  const deck = [{ name:'Only', cost:1 }];
+  const result = performDredge(deck, 0);
+  assert(result !== null);
+  assert(result.selected.name === 'Only');
+  assert(deck.length === 1);
+  assert(deck[0].name === 'Only');
+});
+
+test('探底：performDredge 无效索引返回 null', () => {
+  const deck = [{ name:'A', cost:1 }];
+  assert(performDredge(deck, -1) === null);
+  assert(performDredge(deck, 5) === null);
+  assert(performDredge([], 0) === null);
 });
 
 console.log('\n=== P2 集成: cloneMinion infusedCount/forged 保留 ===');

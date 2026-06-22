@@ -1372,6 +1372,12 @@ button {
 
 /* ===== 手牌悬停增强 ===== */
 
+.game-card-wrapper {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
 .game-card {
   transition:
     transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1),

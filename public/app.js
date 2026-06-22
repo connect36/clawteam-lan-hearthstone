@@ -16,7 +16,7 @@ import { decideDragonWarriorAction, decideDragonWarriorTurn, mulliganDragonWarri
 import { dragonWarriorDeck } from './dragon-warrior-cards.js';
 import { evaluateCardPlayState } from './mechanics.js';
 import { checkHonorableKill, checkOverheal } from './mechanic-conditions.js';
-import { createCardInstance, markCardEnteredHand, recordCardPlayed, clearTurnState, checkAndApplyCorruption } from './mechanic-runtime.js';
+import { createCardInstance, markCardEnteredHand, recordCardPlayed, clearTurnState, checkAndApplyCorruption, performDredge } from './mechanic-runtime.js';
 import './animations.js';
 
 // ============================================
@@ -2725,6 +2725,8 @@ function resolveRebornSolo(side) {
         })
       );
       minion.health = 1;
+      minion.deathRecorded = false;        // 第二次死亡可再次计入注能
+      minion.deathrattleTriggered = false; // 第二次死亡可再次触发亡语
       survivors.push(minion);
       pushSoloLog(`${minion.name} 触发了复生，以 1 点生命重新站起。`);
       continue;
@@ -3594,10 +3596,7 @@ function resolveCardSolo(cardInstance, chosenDamageTarget = null) {
     else if (mech === 'forge') pushSoloLog(`锻造触发：${cardInstance.name}`);
   }
 
-  // ── 执行机制效果 ────────────────────────────────────────
-  executeMechanicEffects(cardInstance, triggeredMechanics, chosenDamageTarget);
-
-  // ── 记录出牌（结算完成后） ──────────────────────────────
+  // ── 记录出牌 ──────────────────────────────
   const rt = ensureSoloRuntime('player');
   if (rt) {
     const entry = { instanceId: cardInstance.instanceId, type: cardInstance.type, spellSchool: cardInstance.spellSchool || null, tribes: cardInstance.tribes || [], sourceId: cardInstance.id };
@@ -3605,6 +3604,26 @@ function resolveCardSolo(cardInstance, chosenDamageTarget = null) {
     if (cardInstance.type === 'spell') rt.spellsPlayedThisTurn = [...(rt.spellsPlayedThisTurn || []), cardInstance.instanceId];
   }
   animator?.pulseStat?.(elements.playerMana);
+
+  // ── 探底检查（在效果结算之前） ── PvP TODO: 仅 Solo
+  if ((cardInstance.mechanics || []).includes('dredge')) {
+    state.solo._pendingDredge = { cardInstance, chosenDamageTarget, triggeredMechanics };
+    openDredgeDialogSolo();
+    return;
+  }
+
+  finishCardResolution(cardInstance, chosenDamageTarget, triggeredMechanics);
+}
+
+// ── 卡牌效果结算（探底后继续 / 非探底直接调用） ─────────────
+function finishCardResolution(cardInstance, chosenDamageTarget, triggeredMechanics) {
+  // ── 执行机制效果 ────────────────────────────────────────
+  executeMechanicEffects(cardInstance, triggeredMechanics, chosenDamageTarget);
+
+  // ── 锻造升级：使用 forgedEffects 替代基础 effects ─────
+  const effectiveEffects = (cardInstance.forged && cardInstance.forgedEffects)
+    ? cardInstance.forgedEffects
+    : cardInstance.effects;
 
   if (cardInstance.type === 'minion') {
     const landed = capBoard('player', [cloneMinion(cardInstance, 'player')]);
@@ -3616,7 +3635,7 @@ function resolveCardSolo(cardInstance, chosenDamageTarget = null) {
       }
       state.solo.player.board.push(...landed);
       pushSoloLog(`你打出了 ${cardInstance.name}。`);
-      applyEffectsSolo(cardInstance.effects, 'player', {
+      applyEffectsSolo(effectiveEffects, 'player', {
         primaryTarget: null,
         primaryTargets: {},
         chosenTarget: chosenDamageTarget,
@@ -3628,7 +3647,7 @@ function resolveCardSolo(cardInstance, chosenDamageTarget = null) {
     }
   } else {
     pushSoloLog(`你施放了 ${cardInstance.name}。`);
-    applyEffectsSolo(cardInstance.effects, 'player', {
+    applyEffectsSolo(effectiveEffects, 'player', {
       primaryTarget: null,
       primaryTargets: {},
       chosenTarget: chosenDamageTarget,
@@ -3637,12 +3656,6 @@ function resolveCardSolo(cardInstance, chosenDamageTarget = null) {
     });
     // 法术迸发检查
     triggerSpellburstSolo('player');
-  }
-
-  // ── 探底检查 ── PvP TODO: 仅 Solo
-  if ((cardInstance.mechanics || []).includes('dredge')) {
-    openDredgeDialogSolo();
-    return;
   }
 
   if (!checkSoloOutcome()) {
@@ -3689,14 +3702,20 @@ function openDredgeDialogSolo() {
   const deck = state.solo.player.deck;
   if (deck.length === 0) {
     pushSoloLog('牌库中没有牌可供探底。');
-    renderSolo();
+    const pending = state.solo._pendingDredge;
+    delete state.solo._pendingDredge;
+    if (pending) finishCardResolution(pending.cardInstance, pending.chosenDamageTarget, pending.triggeredMechanics);
+    else renderSolo();
     return;
   }
 
   const bottomCards = deck.slice(-Math.min(3, deck.length));
   if (bottomCards.length === 0) {
     pushSoloLog('牌库中没有牌可供探底。');
-    renderSolo();
+    const pending = state.solo._pendingDredge;
+    delete state.solo._pendingDredge;
+    if (pending) finishCardResolution(pending.cardInstance, pending.chosenDamageTarget, pending.triggeredMechanics);
+    else renderSolo();
     return;
   }
 
@@ -3705,7 +3724,10 @@ function openDredgeDialogSolo() {
   const container = document.getElementById('dredge-options');
   if (!overlay || !container) {
     state.solo.busy = false;
-    renderSolo();
+    const pending = state.solo._pendingDredge;
+    delete state.solo._pendingDredge;
+    if (pending) finishCardResolution(pending.cardInstance, pending.chosenDamageTarget, pending.triggeredMechanics);
+    else renderSolo();
     return;
   }
 
@@ -3724,40 +3746,31 @@ function openDredgeDialogSolo() {
 
   overlay.style.display = 'flex';
 
-  // 设置点击处理
   const onSelect = (event) => {
     const btn = event.target.closest('.dredge-option');
     if (!btn) return;
     const deckIndex = parseInt(btn.dataset.dredgeIndex, 10);
-    const [selected] = deck.splice(deckIndex, 1);
-    deck.unshift(selected);
-    pushSoloLog(`你从牌库底将 ${selected.name} 放到了牌库顶。`);
+    const result = performDredge(deck, deckIndex);
+    if (result) {
+      pushSoloLog(`你从牌库底将 ${result.selected.name} 放到了牌库顶。`);
+    }
     cleanup();
     state.solo.busy = false;
-    renderSolo();
-  };
-
-  const onCancel = () => {
-    pushSoloLog('你取消了探底。');
-    cleanup();
-    state.solo.busy = false;
-    renderSolo();
-  };
-
-  const onOverlayClick = (event) => {
-    if (event.target === overlay) onCancel();
+    const pending = state.solo._pendingDredge;
+    delete state.solo._pendingDredge;
+    if (pending) {
+      finishCardResolution(pending.cardInstance, pending.chosenDamageTarget, pending.triggeredMechanics);
+    } else {
+      renderSolo();
+    }
   };
 
   const cleanup = () => {
     overlay.style.display = 'none';
     container.removeEventListener('click', onSelect);
-    document.getElementById('dredge-cancel')?.removeEventListener('click', onCancel);
-    overlay.removeEventListener('click', onOverlayClick);
   };
 
   container.addEventListener('click', onSelect);
-  document.getElementById('dredge-cancel')?.addEventListener('click', onCancel, { once: true });
-  overlay.addEventListener('click', onOverlayClick);
 }
 
 // ── 统一手牌进入追踪 ──────────────────────────────────────────
@@ -5092,21 +5105,22 @@ function buildHandCardHTML(card) {
     : '';
 
   return `
-    <button
-      type="button"
-      class="game-card ${playable ? visualState : 'is-locked'} ${pending ? 'is-selected' : ''}"
-      data-card-id="${card.instanceId}"
-      ${playable ? '' : 'disabled'}
-    >
-      ${tradeableBtn}
+    <div class="game-card-wrapper" data-card-id="${card.instanceId}">
+      <button
+        type="button"
+        class="game-card ${playable ? visualState : 'is-locked'} ${pending ? 'is-selected' : ''}"
+        ${playable ? '' : 'disabled'}
+      >
+        ${tradeableBtn}
+        ${infuseProgress}
+        <span class="game-card__cost">${effectiveCost}</span>
+        <span class="game-card__name">${card.name}</span>
+        <span class="game-card__type">${card.type === 'minion' ? '随从' : '法术'}</span>
+        ${effectText}
+        <span class="game-card__details">${details}</span>
+      </button>
       ${forgeBtn}
-      ${infuseProgress}
-      <span class="game-card__cost">${effectiveCost}</span>
-      <span class="game-card__name">${card.name}</span>
-      <span class="game-card__type">${card.type === 'minion' ? '随从' : '法术'}</span>
-      ${effectText}
-      <span class="game-card__details">${details}</span>
-    </button>
+    </div>
   `;
 }
 

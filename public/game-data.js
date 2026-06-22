@@ -267,7 +267,7 @@ export const mechanicTestCards = Object.freeze([
     text: '造成2点伤害。锻造(2)：改为造成4点伤害。',
     mechanics: ['forge'], forgeCost: 2,
     effects: [{ type: 'damage', target: 'enemyHero', amount: 2 }],
-    bonusMechanicEffects: { forge: [{ type: 'damage', target: 'enemyHero', amount: 4 }] },
+    forgedEffects: [{ type: 'damage', target: 'enemyHero', amount: 4 }],
   },
   {
     id: 'mt-dredge', name: '探底测试', cost: 1, type: 'spell', deckCount: 2,

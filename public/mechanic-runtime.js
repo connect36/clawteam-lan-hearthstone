@@ -65,6 +65,18 @@ export function recordHealingDone(runtime, amount) {
   runtime.healingDoneThisTurn += amount;
 }
 
+// ── 探底 ────────────────────────────────────────────────────
+// 从牌库底查看最多3张，选择一张移到牌库顶。
+// deckIndex 是选中卡牌在 deck 数组中的实际索引。
+// 返回值：{ selected: 卡牌对象, deck: 修改后的牌库（原地修改） }
+export function performDredge(deck, deckIndex) {
+  if (!deck || deck.length === 0) return null;
+  if (deckIndex < 0 || deckIndex >= deck.length) return null;
+  const [selected] = deck.splice(deckIndex, 1);
+  deck.unshift(selected);
+  return { selected, deck };
+}
+
 // ── 腐蚀 ────────────────────────────────────────────────────
 // 手牌中带有 corrupt 的卡牌，当打出费用更高的牌时变为"已腐蚀"。
 // 比较双方当前实时费用（playedEffectiveCost），而非原始 card.cost。
