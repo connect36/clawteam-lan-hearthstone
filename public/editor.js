@@ -31,6 +31,8 @@ const elements = {
   // 手动机制选择
   fieldMechanics: [...document.querySelectorAll('input[name="mechanics"]')],
   fieldManathirstThreshold: document.getElementById('field-manathirst-threshold'),
+  fieldInfuseThreshold: document.getElementById('field-infuse-threshold'),
+  fieldForgeCost: document.getElementById('field-forge-cost'),
   mechanicBonusFields: document.getElementById('mechanic-bonus-fields'),
   bonusEffectsContainer: document.getElementById('bonus-effects-container'),
   mechanicTypeHint: document.getElementById('mechanic-type-hint'),
@@ -107,7 +109,7 @@ function normalizeCard(card) {
   };
 }
 
-const KNOWN_MECHANICS = ['quickdraw','combo','outcast','finale','manathirst','spellburst','frenzy','honorableKill','overheal','corrupt','battlecry','deathrattle','questline','tradeable','temporary','discover','questReward'];
+const KNOWN_MECHANICS = ['quickdraw','combo','outcast','finale','manathirst','spellburst','frenzy','honorableKill','overheal','corrupt','infuse','forge','dredge','battlecry','deathrattle','questline','tradeable','temporary','discover','questReward'];
 
 function normalizeMechanics(input) {
   if (!input) return [];
@@ -122,6 +124,7 @@ const MECHANIC_LABELS = {
   lifesteal: '吸血', questReward: '任务奖励',
   quickdraw: '快枪', combo: '连击', outcast: '流放', finale: '压轴', manathirst: '法力渴求',
   spellburst: '法术迸发', frenzy: '暴怒', honorableKill: '荣誉消灭', overheal: '过量治疗', corrupt: '腐蚀',
+  infuse: '注能', forge: '锻造', dredge: '探底',
 };
 
 // ── Toast 通知 ────────────────────────────────────────────────
@@ -967,6 +970,14 @@ function renderEditor() {
   if (elements.fieldManathirstThreshold) {
     elements.fieldManathirstThreshold.value = String(model.manathirstThreshold || 5);
   }
+  // 注能阈值
+  if (elements.fieldInfuseThreshold) {
+    elements.fieldInfuseThreshold.value = String(model.infuseThreshold || 2);
+  }
+  // 锻造费用
+  if (elements.fieldForgeCost) {
+    elements.fieldForgeCost.value = String(model.forgeCost || 2);
+  }
   // 法术禁用提示：结算触发机制仅限随从
   if (elements.mechanicTypeHint) {
     const restricted = Object.entries(MECHANIC_TYPE_RESTRICTIONS)
@@ -1161,6 +1172,8 @@ function updateSelectedCardFromForm() {
   // 读取手动机制
   card.editorModel.mechanics = elements.fieldMechanics.filter(i => i.checked).map(i => i.value);
   card.editorModel.manathirstThreshold = toNumber(elements.fieldManathirstThreshold?.value) || 5;
+  card.editorModel.infuseThreshold = toNumber(elements.fieldInfuseThreshold?.value) || 2;
+  card.editorModel.forgeCost = toNumber(elements.fieldForgeCost?.value) || 2;
   card.editorModel.bonusMechanicEffects = readBonusEffectsFromForm(card.editorModel);
 
   // 使用模块化转换写入卡牌最终数据

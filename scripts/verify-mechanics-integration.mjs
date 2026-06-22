@@ -5,7 +5,7 @@ import {
   recordDamageTaken, recordHealingDone, clearTurnState,
   createCardInstance, checkAndApplyCorruption,
 } from '../public/mechanic-runtime.js';
-import { checkFrenzy, checkSpellburst, checkHonorableKill, checkOverheal } from '../public/mechanic-conditions.js';
+import { checkFrenzy, checkSpellburst, checkHonorableKill, checkOverheal, checkForged } from '../public/mechanic-conditions.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -403,6 +403,8 @@ function simulateCloneMinion(source, overrides = {}) {
     )),
     _spellburstTriggered: false,
     _frenzyTriggered: false,
+    infusedCount: overrides.infusedCount ?? source.infusedCount ?? 0,
+    forged: overrides.forged ?? source.forged ?? false,
     attack: source.attack || 0,
     health: source.health || 1,
   };
@@ -486,6 +488,179 @@ test('无 bonus 的普通随从 clone 后 bonusMechanicEffects 为空对象', ()
 });
 
 console.log('\n=== 集成: PvP evaluate 不报错 ===');
+
+console.log('\n=== P2 集成: 注能 ===');
+
+// 模拟手牌扫描（生产函数模式）
+function simulateInfuseScan(hand, sourceId) {
+  for (const card of hand) {
+    if ((card.mechanics || []).includes('infuse') && (card.infusedCount || 0) < (card.infuseThreshold || 2)) {
+      card.infusedCount = (card.infusedCount || 0) + 1;
+    }
+  }
+}
+
+test('注能：createCardInstance 中 infusedCount 默认为 0', () => {
+  const card = { id:'mt-infuse', name:'注能测试', cost:2, type:'spell', mechanics:['infuse'], infuseThreshold: 2 };
+  const ci = createCardInstance(card, 3);
+  assert(ci.infusedCount === 0);
+  assert(typeof ci.infusedCount === 'number');
+});
+
+test('注能：友方随从死亡递增 infusedCount', () => {
+  const hand = [
+    { instanceId:'a', mechanics:['infuse'], infusedCount:0, infuseThreshold:3 },
+    { instanceId:'b', mechanics:[], cost:1 },
+  ];
+  simulateInfuseScan(hand);
+  assert(hand[0].infusedCount === 1);
+});
+
+test('注能：多个友方随从死亡多次递增', () => {
+  const hand = [
+    { instanceId:'a', mechanics:['infuse'], infusedCount:0, infuseThreshold:3 },
+  ];
+  simulateInfuseScan(hand);
+  simulateInfuseScan(hand);
+  simulateInfuseScan(hand);
+  assert(hand[0].infusedCount === 3);
+});
+
+test('注能：达到阈值后不再递增', () => {
+  const hand = [
+    { instanceId:'a', mechanics:['infuse'], infusedCount:2, infuseThreshold:2 },
+  ];
+  simulateInfuseScan(hand);
+  assert(hand[0].infusedCount === 2, 'should not increment past threshold');
+});
+
+test('注能：非 infuse 卡牌不被递增', () => {
+  const hand = [
+    { instanceId:'a', mechanics:[], cost:2 },
+  ];
+  simulateInfuseScan(hand);
+  assert(hand[0].infusedCount === undefined);
+});
+
+test('注能：bonusMechanicEffects.infuse 数据保留', () => {
+  const c = {
+    name:'注能卡', cost:2, type:'spell', instanceId:'if1',
+    mechanics:['infuse'], infusedCount:2, infuseThreshold:2,
+    bonusMechanicEffects: { infuse: [{ type:'armor', target:'friendlyHero', amount:2 }] },
+  };
+  const bonus = c.bonusMechanicEffects.infuse;
+  assert(bonus && bonus.length === 1);
+  assert(bonus[0].type === 'armor');
+  assert(bonus[0].amount === 2);
+});
+
+console.log('\n=== P2 集成: 锻造 ===');
+
+test('锻造：createCardInstance 中 forged 默认为 false', () => {
+  const card = { id:'mt-forge', name:'锻造测试', cost:3, type:'spell', mechanics:['forge'], forgeCost: 2 };
+  const ci = createCardInstance(card, 3);
+  assert(ci.forged === false);
+});
+
+test('锻造：设置 forged=true 后 checkForged 返回 true', () => {
+  const card = { name:'锻造卡', mechanics:['forge'], forged: false };
+  card.forged = true;
+  assert(checkForged(card) === true);
+});
+
+test('锻造：bonusMechanicEffects.forge 数据保留', () => {
+  const c = {
+    name:'锻造卡', cost:3, type:'spell', instanceId:'fg1',
+    mechanics:['forge'], forged: true, forgeCost: 2,
+    bonusMechanicEffects: { forge: [{ type:'damage', target:'enemyHero', amount:4 }] },
+  };
+  const bonus = c.bonusMechanicEffects.forge;
+  assert(bonus && bonus.length === 1);
+  assert(bonus[0].type === 'damage');
+  assert(bonus[0].amount === 4);
+});
+
+test('锻造：clone 后 forged 保留', () => {
+  const source = {
+    instanceId:'fg1', name:'锻造卡', attack:2, health:3,
+    mechanics:['forge'], forged: true,
+    bonusMechanicEffects: { forge: [{ type:'damage', amount:4 }] },
+  };
+  const cloned = simulateCloneMinion(source);
+  assert(cloned.forged === true);
+  assert(cloned.bonusMechanicEffects.forge !== undefined);
+});
+
+console.log('\n=== P2 集成: 探底 ===');
+
+test('探底：不在 activeMechanics 中', () => {
+  const c = {
+    name:'探底卡', cost:1, type:'spell', instanceId:'dr1',
+    mechanics:['dredge'], effects: [{ type:'draw', amount:1 }],
+  };
+  const rt = createPlayerRuntime();
+  const r = evaluateCardPlayState(c, 'player', {}, {
+    hand:[c], currentTurn:3, currentMana:5, phase:'player', effectiveCost:1,
+    runtime:rt, maxBoardSize:7, boardSize:0,
+  });
+  assert(!r.activeMechanics.includes('dredge'), 'dredge must not be active');
+  assert(!r.inactiveMechanics.includes('dredge'), 'dredge must not be inactive');
+  assert(r.playable === true);
+});
+
+test('探底：deck.slice(-3) 取底部3张', () => {
+  const deck = ['a','b','c','d','e','f','g','h'];
+  const bottom = deck.slice(-3);
+  assert(bottom.length === 3);
+  assert(bottom[0] === 'f');
+  assert(bottom[2] === 'h');
+});
+
+test('探底：splice + unshift 移动卡牌到顶部', () => {
+  const deck = ['a','b','c','d','e'];
+  const bottom = deck.slice(-3); // ['c','d','e']
+  const originalIndex = deck.indexOf('d'); // 3
+  const [selected] = deck.splice(originalIndex, 1);
+  assert(deck.length === 4, 'deck should have 4 cards after splice');
+  deck.unshift(selected);
+  assert(deck.length === 5, 'deck restored to 5 cards');
+  assert(deck[0] === 'd', 'selected card should be at top (index 0)');
+  // 未选中的保持相对顺序
+  const remainingBottom = deck.slice(-2); // 原本 c 和 e 应该还在底部
+  assert(remainingBottom.includes('c'));
+  assert(remainingBottom.includes('e'));
+});
+
+test('探底：牌库仅1张时不报错', () => {
+  const deck = ['a'];
+  const bottom = deck.slice(-Math.min(3, deck.length));
+  assert(bottom.length === 1);
+  assert(bottom[0] === 'a');
+});
+
+console.log('\n=== P2 集成: cloneMinion infusedCount/forged 保留 ===');
+
+test('infusedCount 在 clone 后保留', () => {
+  const source = {
+    instanceId:'if1', name:'注能随从', attack:2, health:3,
+    mechanics:['infuse'], infusedCount: 3, infuseThreshold: 3,
+    bonusMechanicEffects: { infuse: [{ type:'armor', amount:2 }] },
+  };
+  const cloned = simulateCloneMinion(source);
+  assert(cloned.infusedCount === 3);
+  assert(cloned.bonusMechanicEffects.infuse !== undefined);
+});
+
+test('forged 在 clone 后保留', () => {
+  const source = {
+    instanceId:'fg1', name:'锻造随从', attack:2, health:3,
+    mechanics:['forge'], forged: true,
+    bonusMechanicEffects: { forge: [{ type:'damage', amount:4 }] },
+  };
+  const cloned = simulateCloneMinion(source);
+  assert(cloned.forged === true);
+  assert(cloned.bonusMechanicEffects.forge !== undefined);
+});
 
 test('PvP 评估 visualState 已定义', () => {
   const c = { cost:2, instanceId:'pvpc1', mechanics:['quickdraw'], enteredHandTurn:2 };

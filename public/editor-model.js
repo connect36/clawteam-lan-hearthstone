@@ -1,7 +1,7 @@
 // 编辑器模型转换 — 独立可测试模块
 import { normalizeKeywords } from './keywords.js';
 
-const KNOWN_MECHANICS = ['quickdraw','combo','outcast','finale','manathirst','spellburst','frenzy','honorableKill','overheal','corrupt','battlecry','deathrattle','questline','tradeable','temporary','discover','questReward'];
+const KNOWN_MECHANICS = ['quickdraw','combo','outcast','finale','manathirst','spellburst','frenzy','honorableKill','overheal','corrupt','infuse','forge','dredge','battlecry','deathrattle','questline','tradeable','temporary','discover','questReward'];
 
 function normalizeMechanics(input) {
   if (!input) return [];
@@ -59,6 +59,8 @@ export function extractStructuredEffects(card) {
     mechanics: normalizeMechanics(card.mechanics || []),
     bonusMechanicEffects: clone(card.bonusMechanicEffects || {}),
     manathirstThreshold: card.manathirstThreshold ?? 5,
+    infuseThreshold: card.infuseThreshold ?? 2,
+    forgeCost: card.forgeCost ?? 2,
     questlineEnabled: !!(card.effects || []).some(e => e.type === 'questline'),
     questStages: (card.effects || []).filter(e => e.type === 'questline').map(e => ({
       threshold: (e.thresholds || [12])[0] || 12,
@@ -105,6 +107,16 @@ export function editorModelToCard(model, card) {
     card.manathirstThreshold = model.manathirstThreshold ?? 5;
   } else {
     delete card.manathirstThreshold;
+  }
+  if (card.mechanics.includes('infuse')) {
+    card.infuseThreshold = model.infuseThreshold ?? 2;
+  } else {
+    delete card.infuseThreshold;
+  }
+  if (card.mechanics.includes('forge')) {
+    card.forgeCost = model.forgeCost ?? 2;
+  } else {
+    delete card.forgeCost;
   }
   if (model.costRule) {
     card.costModifier = { rule: model.costRule, amount: 1, minimum: model.costMinimum || 0 };

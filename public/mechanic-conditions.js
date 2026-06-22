@@ -68,3 +68,13 @@ export function checkHonorableKill(damageDealt, targetHealth) {
 export function checkOverheal(healAmount, missingHealth) {
   return healAmount > missingHealth;
 }
+
+// 注能 Infuse：友方随从死亡累计达到阈值
+export function checkInfuse(card) {
+  return (card.infusedCount || 0) >= (card.infuseThreshold || 2);
+}
+
+// 锻造 Forge：已支付法力完成升级
+export function checkForged(card) {
+  return card.forged === true;
+}

@@ -255,6 +255,26 @@ export const mechanicTestCards = Object.freeze([
     effects: [],
     bonusMechanicEffects: { corrupt: [{ type: 'buffSelf', attack: 3, health: 3 }] },
   },
+  {
+    id: 'mt-infuse', name: '注能测试', cost: 2, type: 'spell', deckCount: 2,
+    text: '注能(2)：获得2点护甲',
+    mechanics: ['infuse'], infuseThreshold: 2,
+    effects: [],
+    bonusMechanicEffects: { infuse: [{ type: 'armor', target: 'friendlyHero', amount: 2 }] },
+  },
+  {
+    id: 'mt-forge', name: '锻造测试', cost: 3, type: 'spell', deckCount: 2,
+    text: '造成2点伤害。锻造(2)：改为造成4点伤害。',
+    mechanics: ['forge'], forgeCost: 2,
+    effects: [{ type: 'damage', target: 'enemyHero', amount: 2 }],
+    bonusMechanicEffects: { forge: [{ type: 'damage', target: 'enemyHero', amount: 4 }] },
+  },
+  {
+    id: 'mt-dredge', name: '探底测试', cost: 1, type: 'spell', deckCount: 2,
+    text: '探底。抽一张牌。',
+    mechanics: ['dredge'],
+    effects: [{ type: 'draw', target: 'friendlyHero', amount: 1 }],
+  },
 ]);
 
 export const mechanicTestDeck = [
@@ -270,6 +290,9 @@ export const mechanicTestDeck = [
   { cardId: 'mt-honorablekill-spell', count: 2 },
   { cardId: 'mt-overheal', count: 2 },
   { cardId: 'mt-corrupt', count: 2 },
+  { cardId: 'mt-infuse', count: 2 },
+  { cardId: 'mt-forge', count: 2 },
+  { cardId: 'mt-dredge', count: 2 },
   { cardId: 'hs-64900', count: 1 },
   { cardId: 'hs-59223', count: 2 },
   { cardId: 'hs-111177', count: 2 },

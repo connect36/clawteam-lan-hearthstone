@@ -797,6 +797,8 @@ function cloneMinion(source, side, overrides = {}) {
     maxHealth: health,
     _spellburstTriggered: false,
     _frenzyTriggered: false,
+    infusedCount: overrides.infusedCount ?? source.infusedCount ?? 0,
+    forged: overrides.forged ?? source.forged ?? false,
     ...runtimeState,
   };
 }
@@ -1514,18 +1516,24 @@ const MECHANICS_DRAW_ORDER = [
   'mt-poke',                   // 9: T7抽 — 第二张轻戳
   'mt-honorablekill-spell',    // 10: T8抽
   'mt-quickdraw',              // 11: T9抽
-  'mt-finale',                 // 12
-  'mt-spellburst',             // 13: 第二张法术迸发
-  'mt-frenzy',                 // 14: 第二张暴怒
-  'mt-heal',                   // 15: 第二张治疗
-  'mt-overheal',               // 16: 第二张过量治疗
-  'mt-corrupt',                // 17: 第二张腐蚀
-  'mt-honorablekill-minion',   // 18: 第二张荣誉消灭随从
-  'mt-honorablekill-spell',    // 19: 第二张荣誉消灭法术
-  'mt-quickdraw',              // 20: 第二张快枪
-  'mt-combo',                  // 21: 第二张连击
-  'mt-finale',                 // 22: 第二张压轴
-  'mt-outcast',                // 23: 第二张流放
+  'mt-infuse',                 // 12: T10抽 — 注能测试（需友方随从死亡累积）
+  'mt-forge',                  // 13: T11抽 — 锻造测试（需2点法力升级）
+  'mt-dredge',                 // 14: T12抽 — 探底测试（需牌库深度）
+  'mt-finale',                 // 15
+  'mt-spellburst',             // 16: 第二张法术迸发
+  'mt-frenzy',                 // 17: 第二张暴怒
+  'mt-heal',                   // 18: 第二张治疗
+  'mt-overheal',               // 19: 第二张过量治疗
+  'mt-corrupt',                // 20: 第二张腐蚀
+  'mt-honorablekill-minion',   // 21: 第二张荣誉消灭随从
+  'mt-honorablekill-spell',    // 22: 第二张荣誉消灭法术
+  'mt-quickdraw',              // 23: 第二张快枪
+  'mt-combo',                  // 24: 第二张连击
+  'mt-finale',                 // 25: 第二张压轴
+  'mt-outcast',                // 26: 第二张流放
+  'mt-infuse',                 // 27: 第二张注能
+  'mt-forge',                  // 28: 第二张锻造
+  'mt-dredge',                 // 29: 第二张探底
 ];
 
 function buildMechanicsTestDeck() {
@@ -2689,6 +2697,12 @@ function resolveRebornSolo(side) {
     if (side === 'player' && !minion.deathRecorded) {
       minion.deathRecorded = true;
       ensureSoloRuntime('player').deadFriendlyMinions.push({ sourceId: minion.sourceId, name: minion.name });
+      // PvP TODO: 注能计数仅 Solo — 扫描手牌中注能卡牌累计进度
+      for (const handCard of state.solo.player.hand) {
+        if ((handCard.mechanics || []).includes('infuse') && (handCard.infusedCount || 0) < (handCard.infuseThreshold || 2)) {
+          handCard.infusedCount = (handCard.infusedCount || 0) + 1;
+        }
+      }
     }
     if (!minion.deathrattleTriggered && (minion.effects || []).some((effect) => effect.trigger === 'deathrattle')) {
       minion.deathrattleTriggered = true;
@@ -3576,6 +3590,8 @@ function resolveCardSolo(cardInstance, chosenDamageTarget = null) {
     else if (mech === 'manathirst') pushSoloLog(`法力渴求触发：${cardInstance.name}`);
     else if (mech === 'spellburst') pushSoloLog(`法术迸发触发：${cardInstance.name}`);
     else if (mech === 'corrupt') pushSoloLog(`腐蚀触发：${cardInstance.name}`);
+    else if (mech === 'infuse') pushSoloLog(`注能触发：${cardInstance.name}`);
+    else if (mech === 'forge') pushSoloLog(`锻造触发：${cardInstance.name}`);
   }
 
   // ── 执行机制效果 ────────────────────────────────────────
@@ -3623,6 +3639,12 @@ function resolveCardSolo(cardInstance, chosenDamageTarget = null) {
     triggerSpellburstSolo('player');
   }
 
+  // ── 探底检查 ── PvP TODO: 仅 Solo
+  if ((cardInstance.mechanics || []).includes('dredge')) {
+    openDredgeDialogSolo();
+    return;
+  }
+
   if (!checkSoloOutcome()) {
     renderSolo();
   }
@@ -3660,6 +3682,82 @@ function triggerSpellburstSolo(side) {
       }
     }
   }
+}
+
+// ── 探底对话框 ── PvP TODO: 仅 Solo ─────────────────────────────
+function openDredgeDialogSolo() {
+  const deck = state.solo.player.deck;
+  if (deck.length === 0) {
+    pushSoloLog('牌库中没有牌可供探底。');
+    renderSolo();
+    return;
+  }
+
+  const bottomCards = deck.slice(-Math.min(3, deck.length));
+  if (bottomCards.length === 0) {
+    pushSoloLog('牌库中没有牌可供探底。');
+    renderSolo();
+    return;
+  }
+
+  state.solo.busy = true;
+  const overlay = document.getElementById('dredge-overlay');
+  const container = document.getElementById('dredge-options');
+  if (!overlay || !container) {
+    state.solo.busy = false;
+    renderSolo();
+    return;
+  }
+
+  container.innerHTML = bottomCards.map((card, i) => {
+    const originalIndex = deck.length - bottomCards.length + i;
+    const cost = card.cost ?? 0;
+    const typeLabel = card.type === 'minion' ? `${card.attack || 0}/${card.health || 1} 随从` : '法术';
+    return `
+      <button type="button" class="dredge-option" data-dredge-index="${originalIndex}">
+        <div class="dredge-option__cost">${cost}</div>
+        <div class="dredge-option__name">${card.name}</div>
+        <div class="dredge-option__type">${typeLabel}</div>
+      </button>
+    `;
+  }).join('');
+
+  overlay.style.display = 'flex';
+
+  // 设置点击处理
+  const onSelect = (event) => {
+    const btn = event.target.closest('.dredge-option');
+    if (!btn) return;
+    const deckIndex = parseInt(btn.dataset.dredgeIndex, 10);
+    const [selected] = deck.splice(deckIndex, 1);
+    deck.unshift(selected);
+    pushSoloLog(`你从牌库底将 ${selected.name} 放到了牌库顶。`);
+    cleanup();
+    state.solo.busy = false;
+    renderSolo();
+  };
+
+  const onCancel = () => {
+    pushSoloLog('你取消了探底。');
+    cleanup();
+    state.solo.busy = false;
+    renderSolo();
+  };
+
+  const onOverlayClick = (event) => {
+    if (event.target === overlay) onCancel();
+  };
+
+  const cleanup = () => {
+    overlay.style.display = 'none';
+    container.removeEventListener('click', onSelect);
+    document.getElementById('dredge-cancel')?.removeEventListener('click', onCancel);
+    overlay.removeEventListener('click', onOverlayClick);
+  };
+
+  container.addEventListener('click', onSelect);
+  document.getElementById('dredge-cancel')?.addEventListener('click', onCancel, { once: true });
+  overlay.addEventListener('click', onOverlayClick);
 }
 
 // ── 统一手牌进入追踪 ──────────────────────────────────────────
@@ -3703,6 +3801,39 @@ function tradeCardSolo(cardId) {
   drawCardsSolo(1);
 
   pushSoloLog(`你将 ${card.name} 洗回牌库并抽了一张牌。`);
+  renderSolo();
+}
+
+// ── 锻造 ──────────────────────────────────────────────────
+// PvP TODO: 锻造暂仅 Solo
+
+function forgeCardSolo(cardId) {
+  if (state.solo.phase !== 'player' || state.solo.busy) return;
+  const index = state.solo.player.hand.findIndex(c => c.instanceId === cardId);
+  if (index < 0) return;
+  const card = state.solo.player.hand[index];
+  if (card.forged) return;
+  const forgeCost = card.forgeCost || 2;
+  if (state.solo.player.mana < forgeCost) {
+    pushSoloLog('法力值不足，无法锻造。');
+    renderSolo();
+    return;
+  }
+
+  // 播放锻造动画
+  const cardEl = document.querySelector(`[data-card-id="${cardId}"]`);
+  if (cardEl) {
+    cardEl.classList.add('anim-forge');
+  }
+
+  // 扣除法力
+  state.solo.player.mana -= forgeCost;
+
+  // 设置锻造标记
+  card.forged = true;
+
+  pushSoloLog(`你锻造了 ${card.name}！`);
+  animator?.pulseStat?.(elements.playerMana);
   renderSolo();
 }
 
@@ -4952,6 +5083,14 @@ function buildHandCardHTML(card) {
     ? `<button type="button" class="game-card__trade" data-trade-id="${card.instanceId}" title="可交易 — 消耗1点法力值，洗回牌库并抽一张牌">↻</button>`
     : '';
 
+  const forgeBtn = ((card.mechanics || []).includes('forge') && !card.forged)
+    ? `<button type="button" class="game-card__forge" data-forge-id="${card.instanceId}" title="锻造 — 消耗${card.forgeCost || 2}点法力值，升级卡牌效果">🔨</button>`
+    : '';
+
+  const infuseProgress = ((card.mechanics || []).includes('infuse') && !(card.infusedCount >= (card.infuseThreshold || 2)))
+    ? `<span class="game-card__infuse-progress">${card.infusedCount || 0}/${card.infuseThreshold || 2}</span>`
+    : '';
+
   return `
     <button
       type="button"
@@ -4960,6 +5099,8 @@ function buildHandCardHTML(card) {
       ${playable ? '' : 'disabled'}
     >
       ${tradeableBtn}
+      ${forgeBtn}
+      ${infuseProgress}
       <span class="game-card__cost">${effectiveCost}</span>
       <span class="game-card__name">${card.name}</span>
       <span class="game-card__type">${card.type === 'minion' ? '随从' : '法术'}</span>
@@ -5331,6 +5472,17 @@ function setupEventHandlers() {
         tradeCardSolo(cardId);
       } else if (state.mode === 'pvp') {
         tradeCardPvp(cardId);
+      }
+      return;
+    }
+
+    // 锻造按钮 — 支付法力升级手牌
+    const forgeBtn = event.target.closest('.game-card__forge');
+    if (forgeBtn) {
+      event.stopPropagation();
+      const cardId = forgeBtn.dataset.forgeId;
+      if (state.mode === 'solo') {
+        forgeCardSolo(cardId);
       }
       return;
     }

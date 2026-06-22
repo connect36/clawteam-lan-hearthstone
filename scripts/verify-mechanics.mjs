@@ -1,7 +1,7 @@
 // 机制验证测试 — P0/P0.5
 import { evaluateCardPlayState, getActiveMechanicLabels } from '../public/mechanics.js';
 import { normalizeKeywords, hasKeyword, getMaxAttacksPerTurn } from '../public/keywords.js';
-import { checkSpellburst, checkFrenzy, checkHonorableKill, checkOverheal } from '../public/mechanic-conditions.js';
+import { checkSpellburst, checkFrenzy, checkHonorableKill, checkOverheal, checkInfuse, checkForged } from '../public/mechanic-conditions.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -241,6 +241,71 @@ test('corrupt inactive when not corrupted', () => {
   const r = evaluateCardPlayState(c, 'player', {}, { hand:[c], currentTurn:3, currentMana:5, phase:'player', effectiveCost:2, runtime:makeRuntime() });
   assert(r.visualState === 'is-playable');
   assert(!r.activeMechanics.includes('corrupt'));
+});
+
+console.log('\n=== P2: 注能 ===');
+test('checkInfuse true when infusedCount >= threshold', () => {
+  assert(checkInfuse({ infusedCount: 3, infuseThreshold: 3 }) === true);
+  assert(checkInfuse({ infusedCount: 2, infuseThreshold: 2 }) === true);
+  assert(checkInfuse({ infusedCount: 5, infuseThreshold: 3 }) === true);
+});
+test('checkInfuse false when infusedCount < threshold', () => {
+  assert(checkInfuse({ infusedCount: 1, infuseThreshold: 3 }) === false);
+  assert(checkInfuse({ infusedCount: 0, infuseThreshold: 2 }) === false);
+});
+test('checkInfuse false when infusedCount undefined', () => {
+  assert(checkInfuse({ infuseThreshold: 2 }) === false);
+});
+test('infuse threshold defaults to 2', () => {
+  assert(checkInfuse({ infusedCount: 1 }) === false);
+  assert(checkInfuse({ infusedCount: 2 }) === true);
+});
+test('infuse visual state gold when active', () => {
+  const c = { cost:2, instanceId:'if1', mechanics:['infuse'], infusedCount: 2, infuseThreshold: 2 };
+  const r = evaluateCardPlayState(c, 'player', {}, { hand:[c], currentTurn:3, currentMana:5, phase:'player', effectiveCost:2, runtime:makeRuntime() });
+  assert(r.visualState === 'is-trigger-ready');
+  assert(r.activeMechanics.includes('infuse'));
+});
+test('infuse visual state green when inactive', () => {
+  const c = { cost:2, instanceId:'if2', mechanics:['infuse'], infusedCount: 1, infuseThreshold: 3 };
+  const r = evaluateCardPlayState(c, 'player', {}, { hand:[c], currentTurn:3, currentMana:5, phase:'player', effectiveCost:2, runtime:makeRuntime() });
+  assert(r.visualState === 'is-playable');
+  assert(!r.activeMechanics.includes('infuse'));
+});
+
+console.log('\n=== P2: 锻造 ===');
+test('checkForged true when forged', () => {
+  assert(checkForged({ forged: true }) === true);
+});
+test('checkForged false when not forged', () => {
+  assert(checkForged({ forged: false }) === false);
+  assert(checkForged({}) === false);
+});
+test('forge visual state gold when forged', () => {
+  const c = { cost:3, instanceId:'fg1', mechanics:['forge'], forged: true };
+  const r = evaluateCardPlayState(c, 'player', {}, { hand:[c], currentTurn:3, currentMana:5, phase:'player', effectiveCost:3, runtime:makeRuntime() });
+  assert(r.visualState === 'is-trigger-ready');
+  assert(r.activeMechanics.includes('forge'));
+});
+test('forge visual state green when not forged', () => {
+  const c = { cost:3, instanceId:'fg2', mechanics:['forge'], forged: false };
+  const r = evaluateCardPlayState(c, 'player', {}, { hand:[c], currentTurn:3, currentMana:5, phase:'player', effectiveCost:3, runtime:makeRuntime() });
+  assert(r.visualState === 'is-playable');
+  assert(!r.activeMechanics.includes('forge'));
+});
+
+console.log('\n=== P2: 探底 ===');
+test('dredge never appears in activeMechanics or inactiveMechanics', () => {
+  const c = { cost:1, instanceId:'dr1', mechanics:['dredge'] };
+  const r = evaluateCardPlayState(c, 'player', {}, { hand:[c], currentTurn:3, currentMana:5, phase:'player', effectiveCost:1, runtime:makeRuntime() });
+  assert(!r.activeMechanics.includes('dredge'), 'dredge must not be in activeMechanics');
+  assert(!r.inactiveMechanics.includes('dredge'), 'dredge must not be in inactiveMechanics');
+  assert(r.visualState === 'is-playable', 'dredge must not affect visual state');
+});
+test('dredge card is playable normally', () => {
+  const c = { cost:1, instanceId:'dr2', mechanics:['dredge'], type:'spell' };
+  const r = evaluateCardPlayState(c, 'player', {}, { hand:[c], currentTurn:3, currentMana:5, phase:'player', effectiveCost:1, runtime:makeRuntime() });
+  assert(r.playable === true);
 });
 
 console.log(`\n${'='.repeat(40)}`);
